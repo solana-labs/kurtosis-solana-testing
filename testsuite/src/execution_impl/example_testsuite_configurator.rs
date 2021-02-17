@@ -9,6 +9,7 @@ use crate::testsuite_impl::example_testsuite::ExampleTestsuite;
 
 use super::example_testsuite_args::ExampleTestsuiteArgs;
 
+// TODO Rename to SolanaTestsuiteConfigurator
 pub struct ExampleTestsuiteConfigurator {}
 
 impl ExampleTestsuiteConfigurator {

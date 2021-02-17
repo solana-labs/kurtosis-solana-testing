@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "kurtosis-rust-example"
-version = "1.10.0"
+version = "1.10.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -519,7 +519,9 @@ dependencies = [
 
 [[package]]
 name = "kurtosis-rust-lib"
-version = "1.10.0"
+version = "1.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b97f909174f6bf5e1360276f245cb7d6f5027a906e6ec6f999a30c2cea02bec"
 dependencies = [
  "anyhow",
  "dashmap",

@@ -26,8 +26,8 @@ fi
 
 # >>>>>>>> Add custom testsuite parameters here <<<<<<<<<<<<<
 custom_params_json='{
-    "apiServiceImage" :"kurtosistech/example-microservices_api",
-    "datastoreServiceImage": "kurtosistech/example-microservices_datastore"
+    "normalImage" :"kurtosistech/solana-testnet:v0.7",
+    "conflictingShredsImage": "kurtosistech/solana-testnet-1-4-14:v0.7"
 }'
 # >>>>>>>> Add custom testsuite parameters here <<<<<<<<<<<<<
 
