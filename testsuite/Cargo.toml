@@ -1,0 +1,23 @@
+[package]
+name = "kurtosis-rust-example"
+edition = "2018"
+version = "1.10.3"  # Do not modify; gets automatically updated during release!
+
+[[bin]]
+name = "testsuite"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.38"
+clap = "3.0.0-beta.2"
+futures = "0.3"
+kurtosis-rust-lib = "1.10.3"
+log = "0.4"
+reqwest = "0.11.0"
+serde = { version = "1.0.123", features = ["derive"] }
+serde_json = "1.0.62"
+simplelog = "0.9.0"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tonic = "0.4.0"
