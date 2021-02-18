@@ -1,1 +1,1 @@
-pub mod test_network;
+pub mod solana_network;

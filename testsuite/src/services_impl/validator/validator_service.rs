@@ -4,13 +4,13 @@ use futures::executor::block_on;
 use kurtosis_rust_lib::services::service::Service;
 use reqwest::{header::CONTENT_TYPE};
 
-const RPC_PORT: u32 = 8899;
-const GOSSIP_PORT: u32 = 8001;
+pub (super) const RPC_PORT: u32 = 8899;
+pub (super) const GOSSIP_PORT: u32 = 8001;
 const TIMEOUT: Duration = Duration::from_secs(60);
 const JSON_CONTENT_TYPE: &str = "application/json";
 const GET_VERSION_RPC_REQUEST: &str = "{\"jsonrpc\":\"2.0\",\"id\":1, \"method\":\"getVersion\"}";
 
-struct ValidatorService {
+pub struct ValidatorService {
     service_id: String,
     ip_addr: String,
 }
@@ -21,6 +21,14 @@ impl ValidatorService {
             service_id,
             ip_addr,
         };
+    }
+
+    pub fn get_rpc_port(&self) -> u32 {
+        return RPC_PORT;
+    }
+
+    pub fn get_gossip_port(&self) -> u32 {
+        return GOSSIP_PORT;
     }
 }
 

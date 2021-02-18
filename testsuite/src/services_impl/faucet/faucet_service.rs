@@ -14,6 +14,10 @@ impl FaucetService {
             ip_addr,
         };
     }
+
+    pub fn get_port(&self) -> u32 {
+        return FAUCET_PORT;
+    }
 }
 
 impl Service for FaucetService {

@@ -7,7 +7,7 @@ use super::faucet_service::{FAUCET_PORT, FaucetService};
 
 const TEST_VOLUME_MOUNTPOINT: &str = "/test-volume";
 
-struct FaucetContainerInitializer {
+pub struct FaucetContainerInitializer {
     docker_image: String,
 }
 
