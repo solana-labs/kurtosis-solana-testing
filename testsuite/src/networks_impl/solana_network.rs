@@ -1,24 +1,25 @@
 use anyhow::{Context, Result, anyhow};
 use std::{time::Duration};
 
-use kurtosis_rust_lib::networks::{network::Network, network_context::NetworkContext};
+use kurtosis_rust_lib::{networks::{network::Network, network_context::NetworkContext}, services::availability_checker::AvailabilityChecker};
 
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
+use super::ed25519_keypair_json_provider::Ed25519KeypairJsonProvider;
+
 const FAUCET_SERVICE_ID: &str = "faucet";
 const BOOTSTRAPPER_SERVICE_ID: &str = "bootstrapper";
-const FIRST_VALIDATOR_SERVICE_ID: &str = "validator1";
-const SECOND_VALIDATOR_SERVICE_ID: &str = "validator2";
+const VALIDATOR_SERVICE_ID_PREFIX: &str = "validator-";
 
 const TIME_BETWEEN_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_BOOTSTRAPPER: u32 = 30;
-const NUM_RETRIES_FOR_VALIDATOR: u32 = 72;
 
 pub struct SolanaNetwork {
     network_ctx: NetworkContext,
     faucet: Option<FaucetService>,
     bootstrapper: Option<ValidatorService>,
     extra_validators: Vec<ValidatorService>,
+    keypair_json_provider: Ed25519KeypairJsonProvider,
 }
 
 impl SolanaNetwork {
@@ -28,6 +29,7 @@ impl SolanaNetwork {
             faucet: None,
             bootstrapper: None,
             extra_validators: Vec::new(),
+            keypair_json_provider: Ed25519KeypairJsonProvider::new(),
         }
     }
 
@@ -62,7 +64,16 @@ impl SolanaNetwork {
         }
 
         info!("Launching bootstrapper container...");
-        let initializer = ValidatorContainerInitializer::for_bootstrapper(docker_image.to_owned(), faucet);
+        let identity_keypair_json = self.keypair_json_provider.provide_keypair_json()
+            .context("An error occurred getting the bootstrapper's identity keypair JSON")?;
+        let vote_account_keypair_json = self.keypair_json_provider.provide_keypair_json()
+            .context("An error occurred getting the bootstrapper's vote account keypair JSON")?;
+        let initializer = ValidatorContainerInitializer::for_bootstrapper(
+            docker_image.to_owned(), 
+            faucet,
+            identity_keypair_json,
+            vote_account_keypair_json,
+        );
         let (service, checker) = self.network_ctx.add_service(BOOTSTRAPPER_SERVICE_ID, &initializer)
             .context("An error occurred adding the bootstrapper")?;
         info!("Bootstrapper container started");
@@ -81,48 +92,32 @@ impl SolanaNetwork {
         }
     }
 
-    // TODO Push availability-checking logic out into Test.Setup
-    pub fn start_first_extra_validator(&mut self, docker_image: &str) -> Result<&ValidatorService> {
+    pub fn start_extra_validator(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
         let bootstrapper = self.bootstrapper.as_ref()
             .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;
 
-        info!("Launching validator container...");
-        let initializer = ValidatorContainerInitializer::for_validator1(docker_image.to_owned(), bootstrapper);
-        let (service, checker) = self.network_ctx.add_service(FIRST_VALIDATOR_SERVICE_ID, &initializer)
-            .context(format!("An error occurred adding validator with ID '{}'", FIRST_VALIDATOR_SERVICE_ID))?;
-        info!("Validator container started");
-
-        info!("Waiting for validator container to become available...");
-        checker.wait_for_startup(&TIME_BETWEEN_POLLS, NUM_RETRIES_FOR_VALIDATOR)
-            .context(format!("An error occurred waiting for validator with ID '{}' to come up", FIRST_VALIDATOR_SERVICE_ID))?;
-        info!("Validator container available");
-
-        self.extra_validators.push(*service);
-        let service_ref = self.extra_validators.get(0)
-            .context("Found no extra validator service, even though we just assigned it - this is VERY strange!")?;
-        return Ok(service_ref);
-    }
-
-    // TODO Push availability-checking logic out into Test.Setup
-    pub fn start_second_extra_validator(&mut self, docker_image: &str) -> Result<&ValidatorService> {
-        let bootstrapper = self.bootstrapper.as_ref()
-            .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;
+        let new_service_idx = self.extra_validators.len();
+        let service_id = format!("{}{}", VALIDATOR_SERVICE_ID_PREFIX, new_service_idx);
 
         info!("Launching validator container...");
-        let initializer = ValidatorContainerInitializer::for_validator2(docker_image.to_owned(), bootstrapper);
-        let (service, checker) = self.network_ctx.add_service(SECOND_VALIDATOR_SERVICE_ID, &initializer)
-            .context(format!("An error occurred adding validator with ID '{}'", SECOND_VALIDATOR_SERVICE_ID))?;
+        let identity_keypair_json = self.keypair_json_provider.provide_keypair_json()
+            .context("An error occurred getting the validator's identity keypair JSON")?;
+        let vote_account_keypair_json = self.keypair_json_provider.provide_keypair_json()
+            .context("An error occurred getting the validator's vote account keypair JSON")?;
+        let initializer = ValidatorContainerInitializer::for_extra_validator(
+            docker_image.to_owned(), 
+            bootstrapper,
+            identity_keypair_json,
+            vote_account_keypair_json,
+        );
+        let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
+            .context(format!("An error occurred adding validator with ID '{}'", service_id))?;
         info!("Validator container started");
 
-        info!("Waiting for validator container to become available...");
-        checker.wait_for_startup(&TIME_BETWEEN_POLLS, NUM_RETRIES_FOR_VALIDATOR)
-            .context(format!("An error occurred waiting for validator with ID '{}' to come up", SECOND_VALIDATOR_SERVICE_ID))?;
-        info!("Validator container available");
-
         self.extra_validators.push(*service);
-        let service_ref = self.extra_validators.get(0)
-            .context("Found no extra validator service, even though we just assigned it - this is VERY strange!")?;
-        return Ok(service_ref);
+        let service_ref = self.extra_validators.get(new_service_idx)
+            .context(format!("Found no extra validator service at idx {}, even though we just added it - this is VERY strange!", new_service_idx))?;
+        return Ok((service_ref, checker));
     }
 }
 
