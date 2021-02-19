@@ -130,15 +130,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
     }
 
     fn initialize_generated_files(&self, generated_files: HashMap<String, File>) -> Result<()> {
-        let files_to_generate = self.get_files_to_generate();
         for (file_key, mut fp) in generated_files {
-            if files_to_generate.contains(&file_key) {
-                return Err(anyhow!(
-                    "Could not find file key '{}' in the mounted files map, even though we expected it",
-                    file_key,
-                ));
-            }
-
             let file_contents;
             if file_key == IDENTITY_FILE_KEY {
                 file_contents = self.validator_type.get_identity_json()
@@ -267,13 +259,9 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         ].borrow_mut());
 
         command_string.append(start_node_cmd.borrow_mut());
-        debug!("Command string: {:?}", command_string);
-        return Ok(Some(command_string));
-        /*
-        commandString = append(commandString, startNodeCmd...)
-        logrus.Debugf("Command string: %v", commandString)
-        // joinedCommandStr := strings.Join(commandString, " ")
-        return []string{strings.Join(commandString, " ")}, nil
-        */
+        // TODO Figure out why this has to be a single string - probably a problem with the image?
+        let command_string_joined = command_string.join(" ");
+        debug!("Command string: {}", command_string_joined);
+        return Ok(Some(vec![command_string_joined]));
     }
 }

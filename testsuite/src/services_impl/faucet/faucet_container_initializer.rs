@@ -64,8 +64,8 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
     ) -> Result<Option<Vec<String>>> {
         let result = Some(
             vec![
-                String::from("/usr/bin/solana-faucet"),
-                String::from("--keypair=/config/faucet.json"),
+                // TODO Figure out why this has to be on one line - maybe something to do with the image?
+                String::from("/usr/bin/solana-faucet --keypair=/config/faucet.json"),
             ]
         );
         return Ok(result);
