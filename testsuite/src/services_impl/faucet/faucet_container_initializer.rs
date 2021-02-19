@@ -19,10 +19,7 @@ impl FaucetContainerInitializer {
     }
 
     fn create_service(service_id: &str, ip_addr: &str) -> Box<dyn Service> {
-        let service = FaucetService{
-            service_id: service_id.to_owned(),
-            ip_addr: ip_addr.to_owned()
-        };
+        let service = FaucetService::new(service_id.to_owned(), ip_addr.to_owned());        
         return Box::new(service);
     }
 }
@@ -47,7 +44,7 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
         return HashSet::new();
     }
 
-    fn initialize_generated_files(&self, generated_files: HashMap<String, File>) -> Result<()> {
+    fn initialize_generated_files(&self, _: HashMap<String, File>) -> Result<()> {
         return Ok(());
     }
 
@@ -62,8 +59,8 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
 
     fn get_start_command(
         &self,
-        generated_file_filepaths: HashMap<String, PathBuf>,
-        ip_addr: &str
+        _: HashMap<String, PathBuf>,
+        _: &str
     ) -> Result<Option<Vec<String>>> {
         let result = Some(
             vec![

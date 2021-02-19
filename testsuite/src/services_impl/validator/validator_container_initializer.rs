@@ -86,23 +86,20 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
     }
 
     fn create_service(service_id: &str, ip_addr: &str) -> Box<dyn Service> {
-        let service = ValidatorService{
-            service_id: service_id.to_owned(),
-            ip_addr: ip_addr.to_owned(),
-        };
+        let service = ValidatorService::new(service_id.to_owned(), ip_addr.to_owned());
         return Box::new(service);
     }
 
     fn build_solana_wallet_command(identity_filepath: &str, bootstrapper_gossip_url: &str, args: &mut Vec<String>) -> Vec<String> {
-        let solana_wallet_cmd: &mut Vec<String> = vec![
+        let mut solana_wallet_cmd: Vec<String> = vec![
             String::from("solana"),
             String::from("--keypair"),
             identity_filepath.to_owned(),
             String::from("--url"),
             bootstrapper_gossip_url.to_owned(),
-        ].borrow_mut();
+        ];
         solana_wallet_cmd.append(args);
-        return *solana_wallet_cmd;
+        return solana_wallet_cmd;
     }
 }
 
@@ -112,7 +109,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
     }
 
     fn get_used_ports(&self) -> std::collections::HashSet<String> {
-        let result = HashSet::new();
+        let mut result = HashSet::new();
         result.insert(format!("{}/tcp", RPC_PORT));
         result.insert(format!("{}/udp", GOSSIP_PORT));
         for port in PORT_RANGE_FOR_GOSSIP_START..PORT_RANGE_FOR_GOSSIP_END {
@@ -126,7 +123,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
     }
 
     fn get_files_to_generate(&self) -> std::collections::HashSet<String> {
-        let result = HashSet::new();
+        let mut result = HashSet::new();
         result.insert(String::from(IDENTITY_FILE_KEY));
         result.insert(String::from(VOTE_ACCOUNT_FILE_KEY));
         return result;
@@ -134,7 +131,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
 
     fn initialize_generated_files(&self, generated_files: HashMap<String, File>) -> Result<()> {
         let files_to_generate = self.get_files_to_generate();
-        for (file_key, fp) in generated_files {
+        for (file_key, mut fp) in generated_files {
             if files_to_generate.contains(&file_key) {
                 return Err(anyhow!(
                     "Could not find file key '{}' in the mounted files map, even though we expected it",
@@ -180,7 +177,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             .context(format!("Could not find file key '{}' in the generated filepaths map, even though we expected it", VOTE_ACCOUNT_FILE_KEY))?
             .to_str()
             .context(format!("Could not get path string representation of {}", VOTE_ACCOUNT_FILE_KEY))?;
-        let command_string: Vec<String> = vec![
+        let mut command_string: Vec<String> = vec![
             String::from("set -x"), 
             String::from("&&"),
         ];
@@ -189,12 +186,12 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             ValidatorType::Validator1 | ValidatorType::Validator2 => {
                 let bootstrapper = self.bootstrapper.context("Validator type requires a bootstrapper, but no bootstrapper was found")?;
                 let bootstrapper_rpc_url = format!("http://{}:{}", bootstrapper.get_ip_address(), RPC_PORT);
-                let transfer_cmd_args = vec![
+                let mut transfer_cmd_args = vec![
                     String::from("transfer"),
                     identity_filepath.to_owned(),
                     SOL_TO_START_VALIDATORS_WITH.to_string(),
                 ];
-                let transfer_cmd = ValidatorContainerInitializer::build_solana_wallet_command(
+                let mut transfer_cmd = ValidatorContainerInitializer::build_solana_wallet_command(
                     FAUCET_KEY_FILEPATH, // Note how we use the faucet key here, since we're transferring data from the faucet
                     &bootstrapper_rpc_url,
                     transfer_cmd_args.borrow_mut(),
@@ -202,22 +199,23 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 command_string.append(transfer_cmd.borrow_mut());
                 command_string.push(String::from("&&"));
         
-                let create_vote_account_cmd = ValidatorContainerInitializer::build_solana_wallet_command(
+                let mut create_vote_account_args = vec![
+                    String::from("create-vote-account"),
+                    vote_account_filepath.to_owned(),
+                    identity_filepath.to_owned(),
+                ];
+                let mut create_vote_account_cmd = ValidatorContainerInitializer::build_solana_wallet_command(
                     identity_filepath,
                     &bootstrapper_rpc_url,
-                    vec![
-                        String::from("create-vote-account"),
-                        vote_account_filepath.to_owned(),
-                        identity_filepath.to_owned(),
-                    ].borrow_mut(),
-                ).borrow_mut();
-                command_string.append(create_vote_account_cmd);
+                    create_vote_account_args.borrow_mut(),
+                );
+                command_string.append(create_vote_account_cmd.borrow_mut());
                 command_string.push(String::from("&&"));
             },
             _ => {},
         }
 
-        let start_node_cmd: Vec<String> = vec![
+        let mut start_node_cmd: Vec<String> = vec![
             String::from("/usr/bin/solana-validator"),
             String::from("--rpc-port"),
             RPC_PORT.to_string(),

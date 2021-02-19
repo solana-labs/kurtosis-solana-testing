@@ -37,16 +37,18 @@ impl Test for SimpleNetworkTest {
 
         info!("Starting the bootstrapper...");
         network.start_bootstrapper(&self.docker_image)
-            .context("An error occurred starting the bootstrapper");
+            .context("An error occurred starting the bootstrapper")?;
         info!("Bootstrapper started");
 
         // TODO Replace with generic "add_extra_validator" call
         info!("Starting the first extra validator...");
-        network.start_first_extra_validator(&self.docker_image);
+        network.start_first_extra_validator(&self.docker_image)
+            .context("An error occurred starting the first extra validator")?;
         info!("First extra validator started");
 
         info!("Starting the second extra validator...");
-        network.start_second_extra_validator(&self.docker_image);
+        network.start_second_extra_validator(&self.docker_image)
+            .context("An error occurred starting the second extra validator")?;
         info!("Second extra validator started");
 
         return Ok(Box::new(network));

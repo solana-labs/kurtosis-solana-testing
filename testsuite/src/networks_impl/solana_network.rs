@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use std::time::Duration;
+use std::{time::Duration};
 
 use kurtosis_rust_lib::networks::{network::Network, network_context::NetworkContext};
 
@@ -38,12 +38,18 @@ impl SolanaNetwork {
             ));
         }
         let initializer = FaucetContainerInitializer::new(docker_image.to_owned());
-        let (service, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
+        let (service_box, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
             .context("An error occurred adding the faucet")?;
+        let service = *service_box;
         checker.wait_for_startup(&TIME_BETWEEN_POLLS, NUM_RETRIES_FOR_BOOTSTRAPPER)
             .context("An error occurred waiting for the faucet to start")?;
-        self.faucet = Some(*service);
-        return Ok(&service);
+        self.faucet = Some(service);
+        match self.faucet.as_ref() {
+            Some(service_ref) => Ok(service_ref),
+            None => Err(anyhow!(
+                "Found no faucet value, even though we just assigned it - this is VERY strange!"
+            )),
+        }
     }
 
     pub fn start_bootstrapper(&mut self, docker_image: &str) -> Result<&ValidatorService> {
@@ -67,7 +73,12 @@ impl SolanaNetwork {
         info!("Bootstrapper available");
 
         self.bootstrapper = Some(*service);
-        return Ok(&service);
+        match self.bootstrapper.as_ref() {
+            Some(service_ref) => Ok(service_ref),
+            None => Err(anyhow!(
+                "Found no bootstrapper service, even though we just assigned it - this is VERY strange!"
+            )),
+        }
     }
 
     // TODO Push availability-checking logic out into Test.Setup
@@ -87,12 +98,13 @@ impl SolanaNetwork {
         info!("Validator container available");
 
         self.extra_validators.push(*service);
-
-        return Ok(&service);
+        let service_ref = self.extra_validators.get(0)
+            .context("Found no extra validator service, even though we just assigned it - this is VERY strange!")?;
+        return Ok(service_ref);
     }
 
     // TODO Push availability-checking logic out into Test.Setup
-    pub fn start_second_extra_validator(&self, docker_image: &str) -> Result<&ValidatorService> {
+    pub fn start_second_extra_validator(&mut self, docker_image: &str) -> Result<&ValidatorService> {
         let bootstrapper = self.bootstrapper.as_ref()
             .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;
 
@@ -108,8 +120,9 @@ impl SolanaNetwork {
         info!("Validator container available");
 
         self.extra_validators.push(*service);
-
-        return Ok(&service);
+        let service_ref = self.extra_validators.get(0)
+            .context("Found no extra validator service, even though we just assigned it - this is VERY strange!")?;
+        return Ok(service_ref);
     }
 }
 
