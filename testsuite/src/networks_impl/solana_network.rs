@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use std::time::Duration;
 
-use kurtosis_rust_lib::networks::network_context::NetworkContext;
+use kurtosis_rust_lib::networks::{network::Network, network_context::NetworkContext};
 
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
@@ -14,7 +14,7 @@ const TIME_BETWEEN_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_BOOTSTRAPPER: u32 = 30;
 const NUM_RETRIES_FOR_VALIDATOR: u32 = 72;
 
-struct SolanaNetwork {
+pub struct SolanaNetwork {
     network_ctx: NetworkContext,
     faucet: Option<FaucetService>,
     bootstrapper: Option<ValidatorService>,
@@ -112,3 +112,5 @@ impl SolanaNetwork {
         return Ok(&service);
     }
 }
+
+impl Network for SolanaNetwork {}

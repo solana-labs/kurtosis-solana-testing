@@ -8,7 +8,7 @@ mod testsuite_impl;
 use anyhow::{Context, Result};
 
 use clap::{App, Arg};
-use execution_impl::example_testsuite_configurator::ExampleTestsuiteConfigurator;
+use execution_impl::solana_testsuite_configurator::SolanaTestsuiteConfigurator;
 use kurtosis_rust_lib::execution::test_suite_executor::TestSuiteExecutor;
 
 const CUSTOM_PARAMS_JSON_FLAG: &str = "custom-params-json";
@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
 
 
     // >>>>>>>>>>>>>>>>>>> REPLACE WITH YOUR OWN CONFIGURATOR <<<<<<<<<<<<<<<<<<<<<<<<
-	let configurator = ExampleTestsuiteConfigurator::new();
+	let configurator = SolanaTestsuiteConfigurator::new();
 	// >>>>>>>>>>>>>>>>>>> REPLACE WITH YOUR OWN CONFIGURATOR <<<<<<<<<<<<<<<<<<<<<<<<
     
     let configurator_box = Box::from(configurator);

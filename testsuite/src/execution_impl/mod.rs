@@ -1,2 +1,2 @@
-pub mod example_testsuite_args;
-pub mod example_testsuite_configurator;
+pub mod solana_testsuite_args;
+pub mod solana_testsuite_configurator;
