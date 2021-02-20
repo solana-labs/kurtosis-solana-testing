@@ -35,8 +35,9 @@ impl Ed25519KeypairJsonProvider {
         let mut csprng = OsRng{};
         let keypair: Keypair = Keypair::generate(csprng.borrow_mut());
         let keypair_bytes: [u8; KEYPAIR_LENGTH] = keypair.to_bytes();
-        let keypair_json = serde_json::to_string(&keypair_bytes)
+        let keypair_json = serde_json::to_string(&keypair_bytes.to_vec())
             .context("An error occurred serializing the ED25519 keypair bytes to JSON")?;
+        debug!("Keypair JSON: {}", keypair_json);
         return Ok(keypair_json);
 
         /*

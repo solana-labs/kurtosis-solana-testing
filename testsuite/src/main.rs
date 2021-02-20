@@ -57,8 +57,8 @@ async fn main() -> Result<()> {
         custom_params_json,
         configurator_box
     );
-    debug!("About to execute test...");
+    println!("About to execute test...");
     executor.run().context("An error occurred running the test suite executor")?;
-    debug!("Exiting testsuite");
+    println!("Exiting testsuite");
     return Ok(());
 }

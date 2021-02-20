@@ -5,10 +5,10 @@ use kurtosis_rust_lib::{networks::network_context::NetworkContext, services::ava
 
 use crate::networks_impl::solana_network::SolanaNetwork;
 
-const NUM_VALIDATORS: u32 = 2;
+const NUM_EXTRA_VALIDATORS: u32 = 1;
 
-const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(1);
-const NUM_RETRIES_FOR_VALIDATOR: u32 = 30;
+const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
+const NUM_RETRIES_FOR_VALIDATOR: u32 = 72;
 
 pub struct SimpleNetworkTest {
     docker_image: String,
@@ -46,7 +46,7 @@ impl Test for SimpleNetworkTest {
         info!("Bootstrapper started");
 
         let mut checkers: Vec<AvailabilityChecker> = Vec::new();
-        for i in 0..NUM_VALIDATORS {
+        for i in 0..NUM_EXTRA_VALIDATORS {
             info!("Starting validator #{}...", i);
             let (_, checker) = network.start_extra_validator(&self.docker_image)
                 .context(format!("An error occurred starting validator #{}", i))?;
@@ -71,7 +71,7 @@ impl Test for SimpleNetworkTest {
     }
 
     fn get_setup_timeout(&self) -> std::time::Duration {
-        return Duration::from_secs(180);
+        return NUM_RETRIES_FOR_VALIDATOR * TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS;
     }
 
     fn get_execution_timeout(&self) -> std::time::Duration {
