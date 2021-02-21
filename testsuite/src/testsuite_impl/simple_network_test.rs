@@ -5,7 +5,7 @@ use kurtosis_rust_lib::{networks::network_context::NetworkContext, services::ava
 
 use crate::networks_impl::solana_network::SolanaNetwork;
 
-const NUM_EXTRA_VALIDATORS: u32 = 1;
+const NUM_EXTRA_VALIDATORS: u32 = 10;
 
 const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_VALIDATOR: u32 = 72;

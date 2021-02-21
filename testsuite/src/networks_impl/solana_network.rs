@@ -64,15 +64,9 @@ impl SolanaNetwork {
         }
 
         info!("Launching bootstrapper container...");
-        let identity_keypair_json = self.keypair_json_provider.provide_keypair_json()
-            .context("An error occurred getting the bootstrapper's identity keypair JSON")?;
-        let vote_account_keypair_json = self.keypair_json_provider.provide_keypair_json()
-            .context("An error occurred getting the bootstrapper's vote account keypair JSON")?;
         let initializer = ValidatorContainerInitializer::for_bootstrapper(
             docker_image.to_owned(), 
             faucet,
-            identity_keypair_json,
-            vote_account_keypair_json,
         );
         let (service, checker) = self.network_ctx.add_service(BOOTSTRAPPER_SERVICE_ID, &initializer)
             .context("An error occurred adding the bootstrapper")?;
