@@ -1,6 +1,6 @@
 Solana Testing
 ==============
-Uses Kurtosis to run holistic integration tests on Solana, referencing Solana's benchmark local cluster documentation: https://docs.solana.com/cluster/bench-tps .
+Uses Kurtosis to run holistic integration tests on Solana, referencing Solana's benchmark local cluster documentation: https://docs.solana.com/cluster/bench-tps . To execute the testsuite, run `scripts/build-and-run.sh all`.
 
 ### Genesis and Faucet Configuration Files
 Genesis and Faucet files, found in `config-v1.3.23`, were created using Solana's multinode-demo scripts at tag v1.3.23.
