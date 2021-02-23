@@ -242,7 +242,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             ValidatorType::Validator => {
                 let bootstrapper = self.bootstrapper
                     .context("Validator service requires a bootstrapper, but no bootstrapper was found")?;
-                let bootstrap_gossip_url = format!("{}:{}", bootstrapper.get_ip_address(), bootstrapper.get_gossip_port());
+                let bootstrap_gossip_url = format!("{}:{}", bootstrapper.get_ip_address(), GOSSIP_PORT);
                 start_node_cmd.append(vec![
                     String::from("--entrypoint"), 
                     bootstrap_gossip_url,

@@ -25,16 +25,8 @@ impl ValidatorService {
     }
 
     pub fn get_client(&self) -> RpcClient {
-        let url = format!("{}:{}", self.ip_addr, RPC_PORT);
+        let url = format!("http://{}:{}", self.ip_addr, RPC_PORT);
         return RpcClient::new(url);
-    }
-
-    pub fn get_rpc_port(&self) -> u32 {
-        return RPC_PORT;
-    }
-
-    pub fn get_gossip_port(&self) -> u32 {
-        return GOSSIP_PORT;
     }
 }
 
