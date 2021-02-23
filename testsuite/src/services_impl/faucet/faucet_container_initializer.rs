@@ -1,20 +1,23 @@
-use anyhow::Result;
-use std::{collections::{HashMap, HashSet}, fs::File, path::PathBuf};
+use anyhow::{Context, Result, anyhow};
+use std::{collections::{HashMap, HashSet}, fs::File, io::Write, path::PathBuf};
 
 use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service};
 
 use super::faucet_service::{FAUCET_PORT, FaucetService};
 
+const KEYPAIR_FILE_KEY: &str = "keypair";
 const TEST_VOLUME_MOUNTPOINT: &str = "/test-volume";
 
 pub struct FaucetContainerInitializer {
     docker_image: String,
+    keypair_json: String,
 }
 
 impl FaucetContainerInitializer {
-    pub fn new(docker_image: String) -> FaucetContainerInitializer {
+    pub fn new(docker_image: String, keypair_json: String) -> FaucetContainerInitializer {
         return FaucetContainerInitializer{
             docker_image,
+            keypair_json,
         };
     }
 
@@ -41,10 +44,23 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
     }
 
     fn get_files_to_generate(&self) -> HashSet<String> {
-        return HashSet::new();
+        let mut result: HashSet<String> = HashSet::new();
+        result.insert(KEYPAIR_FILE_KEY.to_owned());
+        return result;
     }
 
-    fn initialize_generated_files(&self, _: HashMap<String, File>) -> Result<()> {
+    fn initialize_generated_files(&self, generated_files: HashMap<String, File>) -> Result<()> {
+        for (file_key, mut fp) in generated_files {
+            if file_key == KEYPAIR_FILE_KEY {
+                fp.write_all(self.keypair_json.as_bytes())
+                    .context("An error occurred writing the faucet keypair JSON To file")?;
+            } else {
+                return Err(anyhow!(
+                    "Unrecognized file key '{}'",
+                    file_key,
+                ));
+            }
+        };
         return Ok(());
     }
 
@@ -59,13 +75,18 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
 
     fn get_start_command(
         &self,
-        _: HashMap<String, PathBuf>,
+        generated_files: HashMap<String, PathBuf>,
         _: &str
     ) -> Result<Option<Vec<String>>> {
+        let keypair_json_filepath = generated_files.get(KEYPAIR_FILE_KEY)
+            .context(format!("Couldn't find file key '{}' in the generated files map", KEYPAIR_FILE_KEY))?;
+        let keypair_filepath_str = keypair_json_filepath.to_str()
+            .context("Couldn't convert keypair filepath to string")?;
+        // TODO Figure out why this has to be on one line - maybe something to do with the image?
+        let command_str = format!("/usr/bin/solana-faucet --keypair={}", keypair_filepath_str);
         let result = Some(
             vec![
-                // TODO Figure out why this has to be on one line - maybe something to do with the image?
-                String::from("/usr/bin/solana-faucet --keypair=/config/faucet.json"),
+                command_str,
             ]
         );
         return Ok(result);

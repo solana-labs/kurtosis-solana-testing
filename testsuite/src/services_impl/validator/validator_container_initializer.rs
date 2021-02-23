@@ -8,8 +8,8 @@ use crate::services_impl::faucet::faucet_service::FaucetService;
 use super::validator_service::{GOSSIP_PORT, RPC_PORT, ValidatorService};
 
 // From the manually-generated files living inside the image
-const BOOTSTRAPPER_IDENTITY_JSON: &str = "[119,10,110,240,184,111,52,21,152,194,77,4,19,167,149,203,251,192,77,140,31,224,241,193,212,207,48,26,46,187,133,16,207,147,116,101,255,227,197,248,122,188,161,50,9,114,38,251,152,69,125,33,112,255,38,25,96,97,232,231,133,184,184,188]";
-const BOOTSTRAPPER_VOTE_ACCOUNT_JSON: &str = "[132,87,135,181,188,215,9,56,179,40,16,154,110,218,28,29,126,51,193,111,30,35,146,24,51,201,233,237,198,159,182,217,129,181,26,123,182,80,82,87,144,23,46,135,214,21,85,167,68,156,223,26,77,103,130,63,57,249,250,29,98,163,222,25]";
+// const BOOTSTRAPPER_IDENTITY_JSON: &str = "[119,10,110,240,184,111,52,21,152,194,77,4,19,167,149,203,251,192,77,140,31,224,241,193,212,207,48,26,46,187,133,16,207,147,116,101,255,227,197,248,122,188,161,50,9,114,38,251,152,69,125,33,112,255,38,25,96,97,232,231,133,184,184,188]";
+// const BOOTSTRAPPER_VOTE_ACCOUNT_JSON: &str = "[132,87,135,181,188,215,9,56,179,40,16,154,110,218,28,29,126,51,193,111,30,35,146,24,51,201,233,237,198,159,182,217,129,181,26,123,182,80,82,87,144,23,46,135,214,21,85,167,68,156,223,26,77,103,130,63,57,249,250,29,98,163,222,25]";
 
 const PORT_RANGE_FOR_GOSSIP_START: u32 = 8000;
 const PORT_RANGE_FOR_GOSSIP_END: u32 = 10000;
@@ -23,6 +23,9 @@ const FAUCET_KEY_FILEPATH: &str = "config/faucet.json";
 const SOL_TO_START_VALIDATORS_WITH: u64 = 500;
 const SKIP_CORRUPTED_RECORD_RECOVERY_MODE: &str = "skip_any_corrupted_record";
 
+// Where to mount the ledger directory on the validator container
+const LEDGER_DIR_MOUNTPOINT: &str = "/ledger";
+
 enum ValidatorType {
     Bootstrapper,
     Validator,
@@ -30,40 +33,48 @@ enum ValidatorType {
 
 pub struct ValidatorContainerInitializer<'obj> {
 	docker_image: String,
-    vote_account_keypair_json: String,
+    ledger_dir_artifact_key: String,
     validator_type: ValidatorType,
     identity_keypair_json: String,
+    vote_account_keypair_json: String,
     bootstrapper: Option<&'obj ValidatorService>,  // Only filled in for non-bootstrappers
     faucet: Option<&'obj FaucetService>,   // Only used with the bootstrapper
 }
 
 impl<'obj> ValidatorContainerInitializer<'obj> {
-    pub fn for_bootstrapper(docker_image: String,
+    pub fn for_bootstrapper(
+        docker_image: String,
+        ledger_dir_artifact_key: String,
+        identity_keypair_json: String,
+        vote_account_keypair_json: String,
         faucet: &'obj FaucetService,
     ) -> ValidatorContainerInitializer {
         return ValidatorContainerInitializer{
-            bootstrapper: None,
             docker_image,
-            faucet: Some(faucet),
-            identity_keypair_json: String::from(BOOTSTRAPPER_IDENTITY_JSON),
+            ledger_dir_artifact_key,
             validator_type: ValidatorType::Bootstrapper,
-            vote_account_keypair_json: String::from(BOOTSTRAPPER_VOTE_ACCOUNT_JSON),
+            identity_keypair_json,
+            vote_account_keypair_json,
+            bootstrapper: None,
+            faucet: Some(faucet),
         }
     }
 
     pub fn for_extra_validator(
         docker_image: String,
-        bootstrapper: &'obj ValidatorService,
+        ledger_dir_artifact_key: String,
         identity_keypair_json: String,
         vote_account_keypair_json: String,
+        bootstrapper: &'obj ValidatorService,
     ) -> ValidatorContainerInitializer {
         return ValidatorContainerInitializer{
-            bootstrapper: Some(bootstrapper),
             docker_image,
-            faucet: None,
-            identity_keypair_json,
+            ledger_dir_artifact_key,
             validator_type: ValidatorType::Validator,
+            identity_keypair_json,
             vote_account_keypair_json,
+            bootstrapper: Some(bootstrapper),
+            faucet: None,
         }
     }
 
@@ -130,8 +141,13 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         return Ok(());
     }
 
-    fn get_files_artifact_mountpoints(&self) -> std::collections::HashMap<String, String> {
-        return HashMap::new();
+    fn get_files_artifact_mountpoints(&self) -> HashMap<String, String> {
+        let mut result: HashMap<String, String> = HashMap::new();
+        result.insert(
+            self.ledger_dir_artifact_key.clone(),
+            LEDGER_DIR_MOUNTPOINT.to_owned(),
+        );
+        return result;
     }
 
     fn get_test_volume_mountpoint(&self) -> &'static str {
@@ -157,9 +173,12 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         ];
 
         match self.validator_type {
+            // Extra (non-bootstrapper) validators won't have vote accounts, so we need to create them before we start the validator
             ValidatorType::Validator => {
                 let bootstrapper = self.bootstrapper.context("Validator type requires a bootstrapper, but no bootstrapper was found")?;
                 let bootstrapper_rpc_url = format!("http://{}:{}", bootstrapper.get_ip_address(), RPC_PORT);
+
+                // TODO Remove this, given that our genesis config should give the bootstrapper some cash to start with
                 let mut transfer_cmd_args = vec![
                     String::from("transfer"),
                     identity_filepath.to_owned(),

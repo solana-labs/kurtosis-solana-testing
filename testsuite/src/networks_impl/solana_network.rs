@@ -6,6 +6,7 @@ use kurtosis_rust_lib::{networks::{network::Network, network_context::NetworkCon
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
 use super::ed25519_keypair_json_provider::Ed25519KeypairJsonProvider;
+use super::genesis_config::{FAUCET_KEYPAIR, BOOTSTRAPPER_IDENTITY_KEYPAIR, BOOTSTRAPPER_VOTE_ACCOUNT_KEYPAIR};
 
 const FAUCET_SERVICE_ID: &str = "faucet";
 const BOOTSTRAPPER_SERVICE_ID: &str = "bootstrapper";
@@ -16,6 +17,7 @@ const NUM_RETRIES_FOR_BOOTSTRAPPER: u32 = 30;
 
 pub struct SolanaNetwork {
     network_ctx: NetworkContext,
+    ledger_dir_artifact_key: String,
     faucet: Option<FaucetService>,
     bootstrapper: Option<ValidatorService>,
     extra_validators: Vec<ValidatorService>,
@@ -23,9 +25,10 @@ pub struct SolanaNetwork {
 }
 
 impl SolanaNetwork {
-    pub fn new(network_ctx: NetworkContext) -> SolanaNetwork {
+    pub fn new(network_ctx: NetworkContext, ledger_dir_artifact_key: String) -> SolanaNetwork {
         return SolanaNetwork {
             network_ctx,
+            ledger_dir_artifact_key,
             faucet: None,
             bootstrapper: None,
             extra_validators: Vec::new(),
@@ -39,7 +42,10 @@ impl SolanaNetwork {
                 "Cannot add faucet because one already exists",
             ));
         }
-        let initializer = FaucetContainerInitializer::new(docker_image.to_owned());
+        let initializer = FaucetContainerInitializer::new(
+            docker_image.to_owned(),
+            FAUCET_KEYPAIR.keypair_json.to_owned(),
+        );
         let (service_box, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
             .context("An error occurred adding the faucet")?;
         let service = *service_box;
@@ -66,6 +72,9 @@ impl SolanaNetwork {
         info!("Launching bootstrapper container...");
         let initializer = ValidatorContainerInitializer::for_bootstrapper(
             docker_image.to_owned(), 
+            self.ledger_dir_artifact_key.clone(),
+            BOOTSTRAPPER_IDENTITY_KEYPAIR.keypair_json.to_owned(),
+            BOOTSTRAPPER_VOTE_ACCOUNT_KEYPAIR.keypair_json.to_owned(),
             faucet,
         );
         let (service, checker) = self.network_ctx.add_service(BOOTSTRAPPER_SERVICE_ID, &initializer)
@@ -86,6 +95,11 @@ impl SolanaNetwork {
         }
     }
 
+    pub fn get_bootstrapper(&self) -> Result<&ValidatorService> {
+        let result = self.bootstrapper.as_ref().context("No bootstrapper exists")?;
+        return Ok(result);
+    }
+
     pub fn start_extra_validator(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
         let bootstrapper = self.bootstrapper.as_ref()
             .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;
@@ -100,9 +114,10 @@ impl SolanaNetwork {
             .context("An error occurred getting the validator's vote account keypair JSON")?;
         let initializer = ValidatorContainerInitializer::for_extra_validator(
             docker_image.to_owned(), 
-            bootstrapper,
+            self.ledger_dir_artifact_key.clone(),
             identity_keypair_json,
             vote_account_keypair_json,
+            bootstrapper,
         );
         let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
             .context(format!("An error occurred adding validator with ID '{}'", service_id))?;
@@ -112,6 +127,12 @@ impl SolanaNetwork {
         let service_ref = self.extra_validators.get(new_service_idx)
             .context(format!("Found no extra validator service at idx {}, even though we just added it - this is VERY strange!", new_service_idx))?;
         return Ok((service_ref, checker));
+    }
+
+    pub fn get_extra_validator(&self, index: usize) -> Result<&ValidatorService> {
+        let result = self.extra_validators.get(index)
+            .context(format!("An error occurred getting validator at index {}", index))?;
+        return Ok(result);
     }
 }
 

@@ -3,6 +3,7 @@ use std::time::Duration;
 use futures::executor::block_on;
 use kurtosis_rust_lib::services::service::Service;
 use reqwest::{header::CONTENT_TYPE};
+use solana_client::rpc_client::RpcClient;
 
 pub (super) const RPC_PORT: u32 = 8899;
 pub (super) const GOSSIP_PORT: u32 = 8001;
@@ -21,6 +22,11 @@ impl ValidatorService {
             service_id,
             ip_addr,
         };
+    }
+
+    pub fn get_client(&self) -> RpcClient {
+        let url = format!("{}:{}", self.ip_addr, RPC_PORT);
+        return RpcClient::new(url);
     }
 
     pub fn get_rpc_port(&self) -> u32 {
