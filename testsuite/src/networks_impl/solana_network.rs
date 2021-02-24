@@ -5,8 +5,8 @@ use kurtosis_rust_lib::{networks::{network::Network, network_context::NetworkCon
 
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
-use super::ed25519_keypair_json_provider::Ed25519KeypairJsonProvider;
-use super::genesis_config::{FAUCET_KEYPAIR, BOOTSTRAPPER_IDENTITY_KEYPAIR, BOOTSTRAPPER_VOTE_ACCOUNT_KEYPAIR};
+use super::{genesis_bootstrapper_keypairs_provider::GenesisBootstrapperKeypairsProvider};
+use super::genesis_config::{FAUCET_KEYPAIR};
 
 const FAUCET_SERVICE_ID: &str = "faucet";
 const BOOTSTRAPPER_SERVICE_ID: &str = "bootstrapper";
@@ -21,7 +21,7 @@ pub struct SolanaNetwork {
     faucet: Option<FaucetService>,
     bootstrapper: Option<ValidatorService>,
     extra_validators: Vec<ValidatorService>,
-    keypair_json_provider: Ed25519KeypairJsonProvider,
+    genesis_keypair_provider: GenesisBootstrapperKeypairsProvider,
 }
 
 impl SolanaNetwork {
@@ -32,7 +32,7 @@ impl SolanaNetwork {
             faucet: None,
             bootstrapper: None,
             extra_validators: Vec::new(),
-            keypair_json_provider: Ed25519KeypairJsonProvider::new(),
+            genesis_keypair_provider: GenesisBootstrapperKeypairsProvider::new(),
         }
     }
 
@@ -70,11 +70,13 @@ impl SolanaNetwork {
         }
 
         info!("Launching bootstrapper container...");
+        let genesis_keypairs = self.genesis_keypair_provider.get_genesis_bootstrapper_keypairs()
+            .context("Could not get genesis keypairs for new bootstrapper validator node")?;
         let initializer = ValidatorContainerInitializer::for_bootstrapper(
             docker_image.to_owned(), 
             self.ledger_dir_artifact_key.clone(),
-            BOOTSTRAPPER_IDENTITY_KEYPAIR.keypair_json.to_owned(),
-            BOOTSTRAPPER_VOTE_ACCOUNT_KEYPAIR.keypair_json.to_owned(),
+            genesis_keypairs.identity.keypair_json.to_owned(),
+            genesis_keypairs.vote_account.keypair_json.to_owned(),
             faucet,
         );
         let (service, checker) = self.network_ctx.add_service(BOOTSTRAPPER_SERVICE_ID, &initializer)
@@ -108,6 +110,35 @@ impl SolanaNetwork {
         let service_id = format!("{}{}", VALIDATOR_SERVICE_ID_PREFIX, new_service_idx);
 
         info!("Launching validator container...");
+        let genesis_keypairs = self.genesis_keypair_provider.get_genesis_bootstrapper_keypairs()
+            .context("Could not get genesis keypairs for new validator node")?;
+        let initializer = ValidatorContainerInitializer::for_extra_validator(
+            docker_image.to_owned(), 
+            self.ledger_dir_artifact_key.clone(),
+            genesis_keypairs.identity.keypair_json.to_owned(),
+            genesis_keypairs.vote_account.keypair_json.to_owned(),
+            bootstrapper,
+        );
+        let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
+            .context(format!("An error occurred adding validator with ID '{}'", service_id))?;
+        info!("Validator container started");
+
+        self.extra_validators.push(*service);
+        let service_ref = self.extra_validators.get(new_service_idx)
+            .context(format!("Found no extra validator service at idx {}, even though we just added it - this is VERY strange!", new_service_idx))?;
+        return Ok((service_ref, checker));
+
+    }
+
+    /*
+    pub fn start_extra_validator(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
+        let bootstrapper = self.bootstrapper.as_ref()
+            .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;
+
+        let new_service_idx = self.extra_validators.len();
+        let service_id = format!("{}{}", VALIDATOR_SERVICE_ID_PREFIX, new_service_idx);
+
+        info!("Launching validator container...");
         let identity_keypair_json = self.keypair_json_provider.provide_keypair_json()
             .context("An error occurred getting the validator's identity keypair JSON")?;
         let vote_account_keypair_json = self.keypair_json_provider.provide_keypair_json()
@@ -128,6 +159,7 @@ impl SolanaNetwork {
             .context(format!("Found no extra validator service at idx {}, even though we just added it - this is VERY strange!", new_service_idx))?;
         return Ok((service_ref, checker));
     }
+    */
 
     pub fn get_extra_validator(&self, index: usize) -> Result<&ValidatorService> {
         let result = self.extra_validators.get(index)

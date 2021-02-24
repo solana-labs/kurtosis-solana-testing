@@ -8,7 +8,7 @@ use super::simple_network_test;
 // TODO Formalize these at the testsuite level in Kurtosis itself
 // See: https://github.com/kurtosis-tech/kurtosis-libs/issues/33
 pub (super) const LEDGER_DIR_ARTIFACT_KEY: &str = "ledger-dir";
-pub (super) const LEDGER_DIR_ARTIFACT_URL: &str = "https://kurtosis-public-access.s3.us-east-1.amazonaws.com/solana/2021-02-22_genesis.tgz";
+pub (super) const LEDGER_DIR_ARTIFACT_URL: &str = "https://kurtosis-public-access.s3.us-east-1.amazonaws.com/solana/2021-02-24_genesis-ledger.tgz";
 
 const SANITY_CHECK_NUM_ITERATIONS: u32 = 1;
 

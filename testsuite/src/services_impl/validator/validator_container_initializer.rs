@@ -172,6 +172,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             String::from("&&"),
         ];
 
+        /*
         match self.validator_type {
             // Extra (non-bootstrapper) validators won't have vote accounts, so we need to create them before we start the validator
             ValidatorType::Validator => {
@@ -207,6 +208,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             },
             _ => {},
         }
+        */
 
         let mut start_node_cmd: Vec<String> = vec![
             String::from("/usr/bin/solana-validator"),

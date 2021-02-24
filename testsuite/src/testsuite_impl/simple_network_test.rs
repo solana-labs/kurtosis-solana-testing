@@ -10,7 +10,7 @@ use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
 const NUM_EXTRA_VALIDATORS: u32 = 1;
 
 const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
-const NUM_RETRIES_FOR_VALIDATOR: u32 = 72;
+const NUM_RETRIES_FOR_VALIDATOR: u32 = 20;
 
 
 pub struct SimpleNetworkTest {
