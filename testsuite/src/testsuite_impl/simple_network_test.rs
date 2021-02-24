@@ -7,7 +7,7 @@ use crate::networks_impl::{solana_network::SolanaNetwork};
 
 use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
 
-const NUM_EXTRA_VALIDATORS: u32 = 10;
+const NUM_EXTRA_VALIDATORS: u32 = 1;
 
 const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_VALIDATOR: u32 = 72;
@@ -83,11 +83,11 @@ impl Test for SimpleNetworkTest {
     fn run(&self, network: Box<SolanaNetwork>, test_ctx: TestContext) -> Result<()> {
         let bootstrapper = network.get_bootstrapper()
             .context("An error occurred getting the bootstrapper service")?;
-        let bootstrapper_client = bootstrapper.get_client();
+        // let bootstrapper_client = bootstrapper.get_client();
 
         let extra_validator = network.get_extra_validator(0)
             .context("An error occurred getting the extra validator service")?;
-        let extra_validator_client = extra_validator.get_client();
+        // let extra_validator_client = extra_validator.get_client();
 
         // TODO Start with a ledger verification????
 
@@ -107,11 +107,11 @@ impl Test for SimpleNetworkTest {
             */
 
             info!("--- RPC API: bootstrap-validator getTransactionCount ({})", i);
-            let bootstrapper_transaction_count = bootstrapper_client.get_transaction_count()
+            let bootstrapper_transaction_count = bootstrapper.get_transaction_count()
                 .context("An error occurred getting the bootstrapper transaction count")?;
             
             info!("--- RPC API: validator getTransactionCount ({})", i);
-            let extra_validator_transaction_count = extra_validator_client.get_transaction_count()
+            let extra_validator_transaction_count = extra_validator.get_transaction_count()
                 .context("An error occurred getting the extra validator transaction count")?;
 
             match last_transaction_count_opt.as_ref() {

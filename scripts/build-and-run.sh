@@ -31,6 +31,7 @@ custom_params_json='{
 }'
 # >>>>>>>> Add custom testsuite parameters here <<<<<<<<<<<<<
 
+# TODO Use https://github.com/emk/rust-musl-builder/issues/114 to cache crates.io index
 bash "${kurtosis_core_dirpath}/build-and-run-core.sh" \
     "${action}" \
     "solana-testsuite" \
