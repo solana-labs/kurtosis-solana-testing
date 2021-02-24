@@ -1447,6 +1447,7 @@ dependencies = [
  "clap 3.0.0-beta.2",
  "ed25519-dalek",
  "futures 0.3.12",
+ "hidapi",
  "kurtosis-rust-lib",
  "log",
  "rand 0.7.3",

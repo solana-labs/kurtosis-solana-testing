@@ -1,5 +1,17 @@
 FROM ekidd/rust-musl-builder:1.50.0 AS builder
+# FROM rust:1.50.0
 WORKDIR /home/rust
+
+# Required for 'hidapi' transitive dependency of the solana client
+# See: https://github.com/tendermint/tmkms/issues/257
+RUN sudo apt-get update -y
+RUN sudo apt-get install -y libudev-dev
+RUN sudo apt-get install -y linux-headers-generic
+RUN sudo apt-get install -y libhidapi-dev
+# RUN apt-get update -y
+# RUN apt-get install -y libudev-dev
+# RUN apt-get install -y linux-headers-$(uname -r)
+# RUN apt-get install -y libhidapi-dev
 
 # Rust doesn't yet have a way to cache build dependencies as Docker layers, so we use this hack so 
 # that building doesn't take 5 minutes every time
