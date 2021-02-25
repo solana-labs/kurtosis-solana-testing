@@ -89,6 +89,8 @@ impl Test for SimpleNetworkTest {
             .context("An error occurred getting the extra validator service")?;
         // let extra_validator_client = extra_validator.get_client();
 
+        // TODO Genesis hash verification???
+
         // TODO Start with a ledger verification????
 
 
