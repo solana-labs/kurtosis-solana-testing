@@ -7,6 +7,7 @@ use crate::networks_impl::{solana_network::SolanaNetwork};
 
 use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
 
+// TODO Parameterize the number of extra nodes???
 const NUM_EXTRA_VALIDATORS: u32 = 1;
 
 const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
@@ -89,10 +90,7 @@ impl Test for SimpleNetworkTest {
             .context("An error occurred getting the extra validator service")?;
         // let extra_validator_client = extra_validator.get_client();
 
-        // TODO Genesis hash verification???
-
         // TODO Start with a ledger verification????
-
 
         let mut last_transaction_count_opt: Option<u64> = None;
         for i in 0..self.num_iterations {

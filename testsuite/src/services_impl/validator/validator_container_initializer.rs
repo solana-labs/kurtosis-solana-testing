@@ -14,6 +14,7 @@ use super::validator_service::{GOSSIP_PORT, RPC_PORT, ValidatorService};
 const PORT_RANGE_FOR_GOSSIP_START: u32 = 8000;
 const PORT_RANGE_FOR_GOSSIP_END: u32 = 10000;
 
+const FAUCET_FILE_KEY: &str = "faucet-keypair";  // TODO Delete this after we figure out why it's needed
 const IDENTITY_FILE_KEY: &str = "identity-keypair";
 const VOTE_ACCOUNT_FILE_KEY: &str = "vote-account-keypair";
 
@@ -33,8 +34,12 @@ enum ValidatorType {
 
 pub struct ValidatorContainerInitializer<'obj> {
 	docker_image: String,
+    expected_bank_hash: String,
+    expected_genesis_hash: String,
+    expected_shred_version: u64,
     ledger_dir_artifact_key: String,
     validator_type: ValidatorType,
+    faucet_keypair_json_opt: Option<String>, // TODO Delete this when we figure out why it's necessary
     identity_keypair_json: String,
     vote_account_keypair_json: String,
     bootstrapper: Option<&'obj ValidatorService>,  // Only filled in for non-bootstrappers
@@ -44,6 +49,9 @@ pub struct ValidatorContainerInitializer<'obj> {
 impl<'obj> ValidatorContainerInitializer<'obj> {
     pub fn for_bootstrapper(
         docker_image: String,
+        expected_bank_hash: String,
+        expected_genesis_hash: String,
+        expected_shred_version: u64,
         ledger_dir_artifact_key: String,
         identity_keypair_json: String,
         vote_account_keypair_json: String,
@@ -51,8 +59,12 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
     ) -> ValidatorContainerInitializer {
         return ValidatorContainerInitializer{
             docker_image,
+            expected_bank_hash,
+            expected_genesis_hash,
+            expected_shred_version,
             ledger_dir_artifact_key,
             validator_type: ValidatorType::Bootstrapper,
+            faucet_keypair_json_opt: None,
             identity_keypair_json,
             vote_account_keypair_json,
             bootstrapper: None,
@@ -62,15 +74,23 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
 
     pub fn for_extra_validator(
         docker_image: String,
+        expected_bank_hash: String,
+        expected_genesis_hash: String,
+        expected_shred_version: u64,
         ledger_dir_artifact_key: String,
+        faucet_keypair_json: String,
         identity_keypair_json: String,
         vote_account_keypair_json: String,
         bootstrapper: &'obj ValidatorService,
     ) -> ValidatorContainerInitializer {
         return ValidatorContainerInitializer{
             docker_image,
+            expected_bank_hash,
+            expected_genesis_hash,
+            expected_shred_version,
             ledger_dir_artifact_key,
             validator_type: ValidatorType::Validator,
+            faucet_keypair_json_opt: Some(faucet_keypair_json),
             identity_keypair_json,
             vote_account_keypair_json,
             bootstrapper: Some(bootstrapper),
@@ -119,6 +139,13 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         let mut result = HashSet::new();
         result.insert(String::from(IDENTITY_FILE_KEY));
         result.insert(String::from(VOTE_ACCOUNT_FILE_KEY));
+        // TODO Delete when we figure out why we need this
+        match self.validator_type {
+            ValidatorType::Validator => {
+                result.insert(String::from(FAUCET_FILE_KEY));
+            },
+            _ => {},
+        }
         return result;
     }
 
@@ -129,6 +156,12 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 file_contents = &self.identity_keypair_json;
             } else if file_key == VOTE_ACCOUNT_FILE_KEY {
                 file_contents = &self.vote_account_keypair_json;
+            // TODO Remove this when we figure out why the faucet is needed
+            } else if file_key == FAUCET_FILE_KEY {
+                let faucet_keypair_json = self.faucet_keypair_json_opt
+                    .as_ref()
+                    .context("Needed to write faucet key file but initializer doesn't have a faucet key")?;
+                file_contents = faucet_keypair_json;
             } else {
                 return Err(anyhow!(
                     "Unrecognized file key '{}'",
@@ -172,44 +205,6 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             String::from("&&"),
         ];
 
-        /*
-        match self.validator_type {
-            // Extra (non-bootstrapper) validators won't have vote accounts, so we need to create them before we start the validator
-            ValidatorType::Validator => {
-                let bootstrapper = self.bootstrapper.context("Validator type requires a bootstrapper, but no bootstrapper was found")?;
-                let bootstrapper_rpc_url = format!("http://{}:{}", bootstrapper.get_ip_address(), RPC_PORT);
-
-                // TODO Remove this, given that our genesis config should give the bootstrapper some cash to start with
-                let mut transfer_cmd_args = vec![
-                    String::from("transfer"),
-                    identity_filepath.to_owned(),
-                    SOL_TO_START_VALIDATORS_WITH.to_string(),
-                ];
-                let mut transfer_cmd = ValidatorContainerInitializer::build_solana_wallet_command(
-                    FAUCET_KEY_FILEPATH, // Note how we use the faucet key here, since we're transferring data from the faucet
-                    &bootstrapper_rpc_url,
-                    transfer_cmd_args.borrow_mut(),
-                );
-                command_string.append(transfer_cmd.borrow_mut());
-                command_string.push(String::from("&&"));
-        
-                let mut create_vote_account_args = vec![
-                    String::from("create-vote-account"),
-                    vote_account_filepath.to_owned(),
-                    identity_filepath.to_owned(),
-                ];
-                let mut create_vote_account_cmd = ValidatorContainerInitializer::build_solana_wallet_command(
-                    identity_filepath,
-                    &bootstrapper_rpc_url,
-                    create_vote_account_args.borrow_mut(),
-                );
-                command_string.append(create_vote_account_cmd.borrow_mut());
-                command_string.push(String::from("&&"));
-            },
-            _ => {},
-        }
-        */
-
         let mut start_node_cmd: Vec<String> = vec![
             String::from("/usr/bin/solana-validator"),
             String::from("--rpc-port"),
@@ -228,8 +223,19 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             GOSSIP_PORT.to_string(),
             String::from("--wal-recovery-mode"),
             SKIP_CORRUPTED_RECORD_RECOVERY_MODE.to_owned(),
+            // This tells the nodes to wait until both are visible in gossip before they start producing blocks
+            // With the stake evenly distributed between the two nodes, neither node will be able to successfully 
+            // build any blocks because we'd normally need 66.6% of the network to vote on a block
+            String::from("--wait-for-supermajority"),
+            String::from("0"),
+            // Whenever wait-for-supermajority is specified, expected-bank-hash is required
+            String::from("--expected-bank-hash"),
+            self.expected_bank_hash.clone(),
+            String::from("--expected-genesis-hash"),
+            self.expected_genesis_hash.clone(),
+            String::from("--expected-shred-version"),
+            self.expected_shred_version.to_string(),
         ];
-        let ledger_dirpath;
         match self.validator_type {
             ValidatorType::Bootstrapper => {
                 let faucet = self.faucet
@@ -239,7 +245,6 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                     String::from("--rpc-faucet-address"), 
                     faucet_url,
                 ].borrow_mut());
-                ledger_dirpath = "config/bootstrap-validator";
             },
             ValidatorType::Validator => {
                 let bootstrapper = self.bootstrapper
@@ -248,15 +253,15 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 start_node_cmd.append(vec![
                     String::from("--entrypoint"), 
                     bootstrap_gossip_url,
+                    String::from("--no-snapshot-fetch"), // Doesn't need to fetch snapshot because it's starting from block 0
+                    String::from("--no-genesis-fetch"), // Doesn't need to fetch genesis because it already has it
                 ].borrow_mut());
-                // TODO Hacky - if this isn't a bootstrap node, don't use the ledger preloaded to the image
-                ledger_dirpath = "/validator-ledger";
             },
         }
 
         start_node_cmd.append(vec![
             String::from("--ledger"), 
-            ledger_dirpath.to_owned(),
+            LEDGER_DIR_MOUNTPOINT.to_owned(),
             String::from("--log"), 
             String::from("-"),
         ].borrow_mut());

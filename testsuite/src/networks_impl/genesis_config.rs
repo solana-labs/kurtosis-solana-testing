@@ -14,7 +14,15 @@ pub const FAUCET_KEYPAIR: GenesisKeypair = GenesisKeypair{
     pubkey: "AKDAFBjxJ5hZ1YzDLcZsTsgs4XkoZQjacyWrSZmQobTV",
 };
 
-
+// These properties are found by running `RUST_LOG=none solana-ledger-tool PROPERY --ledger /the/ledger/dir` on 
+// the ledger directory
+// TODO Figure out why the bank hashes are different on different machines: Interestingly, downloading the 
+//  ledger dir to my local machine (Mac) and getting the bank-hash returns this "Gk2Q...." value, but 
+//  inside the Docker container the bank-hash of the same ledger dir is different!
+// pub const BANK_HASH: &str = "Gk2QcHRMk4tumk7cp89mBFVSKBE1746zEertwrrpgvmP"; // bank-hash of ledger dir on local machine's solana-ledger-tool
+pub const BANK_HASH: &str = "8XfjTvVehssGtshD1byUfnag7Wh6kdaUqVNuYMj2nfCb"; // bank-hash of ledger dir on Docker container's solana-ledger-tool
+pub const GENESIS_HASH: &str = "4ywU35nDwQXGUNPkihherScMa7CMHZWCRibqgikTs1J1"; // genesis-hash
+pub const SHRED_VERSION: u64 = 63878; // shred-version
 
 // This bootstrapper keypair will have been funded in this genesis configuration
 // See the README of this repo to view the exact configuration used to generate the ledger

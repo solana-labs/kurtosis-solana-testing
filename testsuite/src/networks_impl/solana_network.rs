@@ -6,7 +6,7 @@ use kurtosis_rust_lib::{networks::{network::Network, network_context::NetworkCon
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
 use super::{genesis_bootstrapper_keypairs_provider::GenesisBootstrapperKeypairsProvider};
-use super::genesis_config::{FAUCET_KEYPAIR};
+use super::genesis_config::{FAUCET_KEYPAIR, BANK_HASH, GENESIS_HASH, SHRED_VERSION};
 
 const FAUCET_SERVICE_ID: &str = "faucet";
 const BOOTSTRAPPER_SERVICE_ID: &str = "bootstrapper";
@@ -74,6 +74,9 @@ impl SolanaNetwork {
             .context("Could not get genesis keypairs for new bootstrapper validator node")?;
         let initializer = ValidatorContainerInitializer::for_bootstrapper(
             docker_image.to_owned(), 
+            BANK_HASH.to_owned(),
+            GENESIS_HASH.to_owned(),
+            SHRED_VERSION,
             self.ledger_dir_artifact_key.clone(),
             genesis_keypairs.identity.keypair_json.to_owned(),
             genesis_keypairs.vote_account.keypair_json.to_owned(),
@@ -114,7 +117,11 @@ impl SolanaNetwork {
             .context("Could not get genesis keypairs for new validator node")?;
         let initializer = ValidatorContainerInitializer::for_extra_validator(
             docker_image.to_owned(), 
+            BANK_HASH.to_owned(),
+            GENESIS_HASH.to_owned(),
+            SHRED_VERSION,
             self.ledger_dir_artifact_key.clone(),
+            FAUCET_KEYPAIR.keypair_json.to_owned(),
             genesis_keypairs.identity.keypair_json.to_owned(),
             genesis_keypairs.vote_account.keypair_json.to_owned(),
             bootstrapper,
