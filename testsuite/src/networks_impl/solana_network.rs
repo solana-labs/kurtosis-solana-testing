@@ -137,37 +137,6 @@ impl SolanaNetwork {
 
     }
 
-    /*
-    pub fn start_extra_validator(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
-        let bootstrapper = self.bootstrapper.as_ref()
-            .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;
-
-        let new_service_idx = self.extra_validators.len();
-        let service_id = format!("{}{}", VALIDATOR_SERVICE_ID_PREFIX, new_service_idx);
-
-        info!("Launching validator container...");
-        let identity_keypair_json = self.keypair_json_provider.provide_keypair_json()
-            .context("An error occurred getting the validator's identity keypair JSON")?;
-        let vote_account_keypair_json = self.keypair_json_provider.provide_keypair_json()
-            .context("An error occurred getting the validator's vote account keypair JSON")?;
-        let initializer = ValidatorContainerInitializer::for_extra_validator(
-            docker_image.to_owned(), 
-            self.ledger_dir_artifact_key.clone(),
-            identity_keypair_json,
-            vote_account_keypair_json,
-            bootstrapper,
-        );
-        let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
-            .context(format!("An error occurred adding validator with ID '{}'", service_id))?;
-        info!("Validator container started");
-
-        self.extra_validators.push(*service);
-        let service_ref = self.extra_validators.get(new_service_idx)
-            .context(format!("Found no extra validator service at idx {}, even though we just added it - this is VERY strange!", new_service_idx))?;
-        return Ok((service_ref, checker));
-    }
-    */
-
     pub fn get_extra_validator(&self, index: usize) -> Result<&ValidatorService> {
         let result = self.extra_validators.get(index)
             .context(format!("An error occurred getting validator at index {}", index))?;

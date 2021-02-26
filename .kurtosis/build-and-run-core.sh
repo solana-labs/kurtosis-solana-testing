@@ -124,7 +124,7 @@ if "${do_build}"; then
 
     echo "Building '${suite_image}' Docker image..."
     # Buildkit is necessary here else Docker suffers from cache issues
-    if ! DOCKER_BUILDKIT=1 docker build -t "${suite_image}:${docker_tag}" -f "${dockerfile_filepath}" "${repo_dirpath}"; then
+    if ! DOCKER_BUILDKIT=1 docker build --progress=plain -t "${suite_image}:${docker_tag}" -f "${dockerfile_filepath}" "${repo_dirpath}"; then
         echo "Error: Docker build of the testsuite failed" >&2
         exit 1
     fi

@@ -1,13 +1,11 @@
 [package]
 name = "kurtosis-rust-example"
 edition = "2018"
-version = "1.10.3"  # Do not modify; gets automatically updated during release!
+version = "1.10.5"
 
 [[bin]]
 name = "testsuite"
 path = "src/main.rs"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.38"
@@ -16,7 +14,7 @@ ed25519-dalek = { version = "1.0.0-pre.4", features = ["serde"] }
 futures = "0.3"
 kurtosis-rust-lib = "1.10.3"
 log = "0.4"
-rand = "0.7.0"  # Needs to be a version compatible with ed25519-dalek, which uses an older version
+rand = "0.7.0"  # Needs to match the version used by ed25519-dalek, which (as of 2021-02-25) doesn't use the latest 'rand' version
 reqwest = { version = "0.11.0", features = ["blocking"] }
 serde = { version = "1.0.123", features = ["derive"] }
 serde_json = "1.0.62"

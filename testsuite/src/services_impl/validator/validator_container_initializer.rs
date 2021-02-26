@@ -7,10 +7,6 @@ use crate::services_impl::faucet::faucet_service::FaucetService;
 
 use super::validator_service::{GOSSIP_PORT, RPC_PORT, ValidatorService};
 
-// From the manually-generated files living inside the image
-// const BOOTSTRAPPER_IDENTITY_JSON: &str = "[119,10,110,240,184,111,52,21,152,194,77,4,19,167,149,203,251,192,77,140,31,224,241,193,212,207,48,26,46,187,133,16,207,147,116,101,255,227,197,248,122,188,161,50,9,114,38,251,152,69,125,33,112,255,38,25,96,97,232,231,133,184,184,188]";
-// const BOOTSTRAPPER_VOTE_ACCOUNT_JSON: &str = "[132,87,135,181,188,215,9,56,179,40,16,154,110,218,28,29,126,51,193,111,30,35,146,24,51,201,233,237,198,159,182,217,129,181,26,123,182,80,82,87,144,23,46,135,214,21,85,167,68,156,223,26,77,103,130,63,57,249,250,29,98,163,222,25]";
-
 const PORT_RANGE_FOR_GOSSIP_START: u32 = 8000;
 const PORT_RANGE_FOR_GOSSIP_END: u32 = 10000;
 
@@ -20,8 +16,6 @@ const VOTE_ACCOUNT_FILE_KEY: &str = "vote-account-keypair";
 
 const TEST_VOLUME_MOUNTPOINT: &str = "/test-volume";
 
-const FAUCET_KEY_FILEPATH: &str = "config/faucet.json";
-const SOL_TO_START_VALIDATORS_WITH: u64 = 500;
 const SKIP_CORRUPTED_RECORD_RECOVERY_MODE: &str = "skip_any_corrupted_record";
 
 // Where to mount the ledger directory on the validator container
@@ -101,18 +95,6 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
     fn create_service(service_id: &str, ip_addr: &str) -> Box<dyn Service> {
         let service = ValidatorService::new(service_id.to_owned(), ip_addr.to_owned());
         return Box::new(service);
-    }
-
-    fn build_solana_wallet_command(identity_filepath: &str, bootstrapper_gossip_url: &str, args: &mut Vec<String>) -> Vec<String> {
-        let mut solana_wallet_cmd: Vec<String> = vec![
-            String::from("solana"),
-            String::from("--keypair"),
-            identity_filepath.to_owned(),
-            String::from("--url"),
-            bootstrapper_gossip_url.to_owned(),
-        ];
-        solana_wallet_cmd.append(args);
-        return solana_wallet_cmd;
     }
 }
 

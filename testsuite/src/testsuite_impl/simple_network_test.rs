@@ -81,7 +81,7 @@ impl Test for SimpleNetworkTest {
         return Ok(Box::new(network));
     }
 
-    fn run(&self, network: Box<SolanaNetwork>, test_ctx: TestContext) -> Result<()> {
+    fn run(&self, network: Box<SolanaNetwork>, _: TestContext) -> Result<()> {
         let bootstrapper = network.get_bootstrapper()
             .context("An error occurred getting the bootstrapper service")?;
         // let bootstrapper_client = bootstrapper.get_client();

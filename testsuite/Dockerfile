@@ -23,6 +23,8 @@ COPY --chown=rust:rust testsuite testsuite
 RUN cargo test --release --bin testsuite
 RUN cargo build --release --bin testsuite
 
+RUN md5sum /home/rust/target/x86_64-unknown-linux-musl/release/testsuite
+
 # ============= Execution Stage ================
 FROM alpine:3.12 AS execution
 

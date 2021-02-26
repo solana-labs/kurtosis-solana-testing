@@ -26,8 +26,7 @@ fi
 
 # >>>>>>>> Add custom testsuite parameters here <<<<<<<<<<<<<
 custom_params_json='{
-    "normalImage" :"kurtosistech/solana-testnet:v0.7",
-    "conflictingShredsImage": "kurtosistech/solana-testnet-1-4-14:v0.7"
+    "normalImage" :"solanalabs/solana:v1.5.10"
 }'
 # >>>>>>>> Add custom testsuite parameters here <<<<<<<<<<<<<
 
