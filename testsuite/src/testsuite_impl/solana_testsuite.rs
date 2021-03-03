@@ -5,6 +5,13 @@ use simple_network_test::SimpleNetworkTest;
 
 use super::simple_network_test;
 
+// TODO Formalize these at the testsuite level in Kurtosis itself
+// See: https://github.com/kurtosis-tech/kurtosis-libs/issues/33
+pub (super) const LEDGER_DIR_ARTIFACT_KEY: &str = "ledger-dir";
+pub (super) const LEDGER_DIR_ARTIFACT_URL: &str = "https://kurtosis-public-access.s3.us-east-1.amazonaws.com/solana/2021-02-24_genesis-ledger.tgz";
+
+const SANITY_CHECK_NUM_ITERATIONS: u32 = 1;
+
 pub struct SolanaTestsuite {
     normal_image: String,
 }
@@ -21,7 +28,10 @@ impl TestSuite for SolanaTestsuite {
     fn get_tests(&self) -> HashMap<String, Box<dyn DynTest>> {
         let mut result: HashMap<String, Box<dyn DynTest>> = HashMap::new();
 
-        let simple_network_test = SimpleNetworkTest::new(self.normal_image.clone());
+        let simple_network_test = SimpleNetworkTest::new(
+            self.normal_image.clone(), 
+            SANITY_CHECK_NUM_ITERATIONS,
+        );
         let simple_network_test_container = DynTestContainer::new(simple_network_test);
         result.insert(
             String::from("simpleNetworkTest"), 

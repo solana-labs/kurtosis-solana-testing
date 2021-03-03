@@ -1,7 +1,15 @@
 FROM ekidd/rust-musl-builder:1.50.0 AS builder
 WORKDIR /home/rust
 
-# Rust doesn't yet have a way to cache build dependencies as Docker layers, so we use this hack so 
+# # Required for 'hidapi' transitive dependency of the solana client
+# # See: https://github.com/tendermint/tmkms/issues/257
+# RUN sudo apt-get update -y
+# RUN sudo apt-get install -y libudev-dev
+# RUN sudo apt-get install -y linux-headers
+# RUN sudo apt-get install -y linux-headers-generic
+# RUN sudo apt-get install -y libhidapi-dev
+
+## Rust doesn't yet have a way to cache build dependencies as Docker layers, so we use this hack so 
 # that building doesn't take 5 minutes every time
 # The 'chown' is necessary due to https://github.com/emk/rust-musl-builder/issues/26
 COPY --chown=rust:rust Cargo.toml ./
@@ -14,6 +22,8 @@ RUN cargo build --release
 COPY --chown=rust:rust testsuite testsuite
 RUN cargo test --release --bin testsuite
 RUN cargo build --release --bin testsuite
+
+RUN md5sum /home/rust/target/x86_64-unknown-linux-musl/release/testsuite
 
 # ============= Execution Stage ================
 FROM alpine:3.12 AS execution
