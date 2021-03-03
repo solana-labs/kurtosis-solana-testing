@@ -8,7 +8,7 @@ use crate::networks_impl::{solana_network::SolanaNetwork};
 use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
 
 // TODO Parameterize the number of extra nodes???
-const NUM_EXTRA_VALIDATORS: u32 = 1;
+const NUM_EXTRA_VALIDATORS: u32 = 4;
 
 const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_VALIDATOR: u32 = 20;
@@ -116,7 +116,7 @@ impl Test for SimpleNetworkTest {
 
             match last_transaction_count_opt.as_ref() {
                 Some(last_transaction_count) => {
-                    info!("--- Bootstrapper transaction count check: {} < {}", last_transaction_count, bootstrapper_transaction_count);
+                    info!("--- Bootstrapper transaction count check: {} <= {}", last_transaction_count, bootstrapper_transaction_count);
                     if last_transaction_count > &bootstrapper_transaction_count {
                         return Err(anyhow!(
                             "Last transaction count '{}' is greater than bootstrapper transaction count '{}'; transaction count is not advancing!",
