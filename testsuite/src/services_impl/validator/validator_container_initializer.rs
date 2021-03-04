@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, fs::File, io::Write, path::PathBuf};
 
-use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service};
+use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service, service_context::ServiceContext};
 
 use crate::services_impl::faucet::faucet_service::FaucetService;
 
@@ -92,8 +92,8 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
         }
     }
 
-    fn create_service(service_id: &str, ip_addr: &str) -> Box<dyn Service> {
-        let service = ValidatorService::new(service_id.to_owned(), ip_addr.to_owned());
+    fn create_service(service_context: ServiceContext) -> Box<dyn Service> {
+        let service = ValidatorService::new(service_context);
         return Box::new(service);
     }
 }
@@ -113,7 +113,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         return result;
     }
 
-    fn get_service_wrapping_func(&self) -> Box<dyn Fn(&str, &str) -> Box<dyn kurtosis_rust_lib::services::service::Service>> {
+    fn get_service_wrapping_func(&self) -> Box<dyn Fn(ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service>> {
         return Box::new(ValidatorContainerInitializer::create_service);
     }
 
@@ -169,11 +169,11 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         return TEST_VOLUME_MOUNTPOINT;
     }
 
-    fn get_start_command(
+    fn get_start_command_overrides(
         &self,
         generated_file_filepaths: HashMap<String, PathBuf>,
         ip_addr: &str
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<(Option<Vec<String>>, Option<Vec<String>>)> {
         let identity_filepath = generated_file_filepaths.get(IDENTITY_FILE_KEY)
             .context(format!("Could not find file key '{}' in the generated filepaths map, even though we expected it", IDENTITY_FILE_KEY))?
             .to_str()
@@ -252,6 +252,15 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         // TODO Figure out why this has to be a single string - probably a problem with the image?
         let command_string_joined = command_string.join(" ");
         debug!("Command string: {}", command_string_joined);
-        return Ok(Some(vec![command_string_joined]));
+        // We set ENTRYPOINT to empty because the Solana image specifies an ENTRYPOINT that we don't want
+        let entrypoint_args = Some(
+            Vec::new()
+        );
+        let cmd_args = Some(
+            vec![
+                command_string_joined,
+            ]
+        );
+        return Ok((entrypoint_args, cmd_args));
     }
 }

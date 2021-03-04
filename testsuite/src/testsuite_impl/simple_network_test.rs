@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use std::{collections::HashMap, time::Duration};
 
-use kurtosis_rust_lib::{networks::network_context::NetworkContext, services::{availability_checker::AvailabilityChecker, service::Service}, testsuite::{test::Test, test_configuration::TestConfiguration, test_context::TestContext}};
+use kurtosis_rust_lib::{networks::network_context::NetworkContext, services::{availability_checker::AvailabilityChecker}, testsuite::{test::Test, test_configuration::TestConfiguration, test_context::TestContext}};
 
 use crate::networks_impl::{solana_network::SolanaNetwork};
 

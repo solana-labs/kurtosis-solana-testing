@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures::executor::block_on;
-use kurtosis_rust_lib::services::service::Service;
+use kurtosis_rust_lib::services::{service::Service, service_context::ServiceContext};
 use reqwest::{header::CONTENT_TYPE};
 use serde_json::Value;
 
@@ -15,19 +15,21 @@ const JSON_CONTENT_TYPE: &str = "application/json";
 const GET_VERSION_RPC_REQUEST: &str = "{\"jsonrpc\":\"2.0\",\"id\":1, \"method\":\"getVersion\"}";
 
 pub struct ValidatorService {
-    service_id: String,
-    ip_addr: String,
+    service_context: ServiceContext,
     sender: Box<dyn RpcSender>,
 }
 
 impl ValidatorService {
-    pub fn new(service_id: String, ip_addr: String) -> ValidatorService {
-        let url = format!("http://{}:{}", ip_addr, RPC_PORT);
+    pub fn new(service_context: ServiceContext) -> ValidatorService {
+        let url = format!("http://{}:{}", service_context.get_ip_address(), RPC_PORT);
         return ValidatorService{
-            service_id,
-            ip_addr,
+            service_context,
             sender: Box::new(HttpSender::new(url)),
         };
+    }
+
+    pub fn get_ip_address(&self) -> &str {
+        return self.service_context.get_ip_address();
     }
 
     // TODO All of the methods below this point can be replaced by the official Solana RpcClient:
@@ -61,14 +63,6 @@ impl ValidatorService {
 }
 
 impl Service for ValidatorService {
-    fn get_service_id(&self) -> &str {
-        return &self.service_id;
-    }
-
-    fn get_ip_address(&self) -> &str {
-        return &self.ip_addr;
-    }
-
     fn is_available(&self) -> bool {
         let client_or_err = reqwest::ClientBuilder::new()
             .timeout(TIMEOUT)
@@ -81,7 +75,7 @@ impl Service for ValidatorService {
                 return false;
             },
         }
-        let url = format!("http://{}:{}", self.ip_addr, RPC_PORT);
+        let url = format!("http://{}:{}", self.service_context.get_ip_address(), RPC_PORT);
         let resp_future = client.post(&url)
             .header(CONTENT_TYPE, JSON_CONTENT_TYPE)
             .body(GET_VERSION_RPC_REQUEST)
