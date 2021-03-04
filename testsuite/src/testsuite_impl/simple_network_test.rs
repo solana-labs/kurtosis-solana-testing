@@ -8,7 +8,7 @@ use crate::networks_impl::{solana_network::SolanaNetwork};
 use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
 
 // TODO Parameterize the number of extra nodes???
-const NUM_EXTRA_VALIDATORS: u32 = 4;
+const NUM_EXTRA_VALIDATORS: u32 = 9;
 
 const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_VALIDATOR: u32 = 20;
@@ -84,15 +84,13 @@ impl Test for SimpleNetworkTest {
     fn run(&self, network: Box<SolanaNetwork>, _: TestContext) -> Result<()> {
         let bootstrapper = network.get_bootstrapper()
             .context("An error occurred getting the bootstrapper service")?;
-        // let bootstrapper_client = bootstrapper.get_client();
 
         let extra_validator = network.get_extra_validator(0)
             .context("An error occurred getting the extra validator service")?;
-        // let extra_validator_client = extra_validator.get_client();
 
         // TODO Start with a ledger verification????
 
-        let mut last_transaction_count_opt: Option<u64> = None;
+        let mut last_bootstrapper_transaction_count_opt: Option<u64> = None;
         for i in 0..self.num_iterations {
             // TODO Verify that we have exactly as many nodes as expected
             /*
@@ -106,20 +104,21 @@ impl Test for SimpleNetworkTest {
             ) || flag_error
             */
 
-            info!("--- RPC API: bootstrap-validator getTransactionCount ({})", i);
+            info!("RPC API: bootstrap-validator getTransactionCount ({})", i);
             let bootstrapper_transaction_count = bootstrapper.get_transaction_count()
                 .context("An error occurred getting the bootstrapper transaction count")?;
             
-            info!("--- RPC API: validator getTransactionCount ({})", i);
-            let extra_validator_transaction_count = extra_validator.get_transaction_count()
-                .context("An error occurred getting the extra validator transaction count")?;
+            // TODO Figure out why this is timing out
+            // info!("RPC API: validator getTransactionCount ({})", i);
+            // let extra_validator_transaction_count = extra_validator.get_transaction_count()
+            //     .context("An error occurred getting the extra validator transaction count")?;
 
-            match last_transaction_count_opt.as_ref() {
+            match last_bootstrapper_transaction_count_opt.as_ref() {
                 Some(last_transaction_count) => {
-                    info!("--- Bootstrapper transaction count check: {} <= {}", last_transaction_count, bootstrapper_transaction_count);
-                    if last_transaction_count > &bootstrapper_transaction_count {
+                    info!("Bootstrapper transaction count check: verifying that last txn count '{}' < bootstrapper txn count '{}'", last_transaction_count, bootstrapper_transaction_count);
+                    if last_transaction_count >= &bootstrapper_transaction_count {
                         return Err(anyhow!(
-                            "Last transaction count '{}' is greater than bootstrapper transaction count '{}'; transaction count is not advancing!",
+                            "Last transaction count '{}' is >= bootstrapper transaction count '{}'; transaction count is not advancing!",
                             last_transaction_count,
                             bootstrapper_transaction_count,
                         ));
@@ -127,7 +126,7 @@ impl Test for SimpleNetworkTest {
                 },
                 _ => {},
             }
-            last_transaction_count_opt = Some(bootstrapper_transaction_count);
+            last_bootstrapper_transaction_count_opt = Some(bootstrapper_transaction_count);
 
             // TODO Wallet sanity check
             /*

@@ -7,6 +7,8 @@ use crate::services_impl::faucet::faucet_service::FaucetService;
 
 use super::validator_service::{GOSSIP_PORT, RPC_PORT, ValidatorService};
 
+const VALIDATOR_BIN_FILEPATH: &str = "/usr/bin/solana-validator";
+
 const PORT_RANGE_FOR_GOSSIP_START: u32 = 8000;
 const PORT_RANGE_FOR_GOSSIP_END: u32 = 10000;
 
@@ -182,13 +184,13 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             .context(format!("Could not find file key '{}' in the generated filepaths map, even though we expected it", VOTE_ACCOUNT_FILE_KEY))?
             .to_str()
             .context(format!("Could not get path string representation of {}", VOTE_ACCOUNT_FILE_KEY))?;
-        let mut command_string: Vec<String> = vec![
-            String::from("set -x"), 
-            String::from("&&"),
+
+        // We need to override the ENTRYPOINT because the Solana image has an ENTRYPOINT we don't want
+        let entrypoint_args = vec![
+            String::from(VALIDATOR_BIN_FILEPATH),
         ];
 
-        let mut start_node_cmd: Vec<String> = vec![
-            String::from("/usr/bin/solana-validator"),
+        let mut cmd_args: Vec<String> = vec![
             String::from("--rpc-port"),
             RPC_PORT.to_string(),
             String::from("--public-rpc-address"),
@@ -217,13 +219,16 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             self.expected_genesis_hash.clone(),
             String::from("--expected-shred-version"),
             self.expected_shred_version.to_string(),
+            // The PoH speed test is disabled because the validator refuses to start with it enabled, and
+            // the Solana devs confirmed that this is fine to skip for local dev clusters
+            String::from("--no-poh-speed-test"),
         ];
         match self.validator_type {
             ValidatorType::Bootstrapper => {
                 let faucet = self.faucet
                     .context("Bootstrapper service requires a faucet, but no faucet was found")?;
                 let faucet_url = format!("{}:{}", faucet.get_ip_address(), faucet.get_port());
-                start_node_cmd.append(vec![
+                cmd_args.append(vec![
                     String::from("--rpc-faucet-address"), 
                     faucet_url,
                 ].borrow_mut());
@@ -232,7 +237,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 let bootstrapper = self.bootstrapper
                     .context("Validator service requires a bootstrapper, but no bootstrapper was found")?;
                 let bootstrap_gossip_url = format!("{}:{}", bootstrapper.get_ip_address(), GOSSIP_PORT);
-                start_node_cmd.append(vec![
+                cmd_args.append(vec![
                     String::from("--entrypoint"), 
                     bootstrap_gossip_url,
                     String::from("--no-snapshot-fetch"), // Doesn't need to fetch snapshot because it's starting from block 0
@@ -241,26 +246,15 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             },
         }
 
-        start_node_cmd.append(vec![
+        cmd_args.append(vec![
             String::from("--ledger"), 
             LEDGER_DIR_MOUNTPOINT.to_owned(),
             String::from("--log"), 
             String::from("-"),
         ].borrow_mut());
 
-        command_string.append(start_node_cmd.borrow_mut());
-        // TODO Figure out why this has to be a single string - probably a problem with the image?
-        let command_string_joined = command_string.join(" ");
-        debug!("Command string: {}", command_string_joined);
-        // We set ENTRYPOINT to empty because the Solana image specifies an ENTRYPOINT that we don't want
-        let entrypoint_args = Some(
-            Vec::new()
-        );
-        let cmd_args = Some(
-            vec![
-                command_string_joined,
-            ]
-        );
-        return Ok((entrypoint_args, cmd_args));
+        debug!("ENTRYPOINT args: {:?}", entrypoint_args);
+        debug!("CMD args: {:?}", cmd_args);
+        return Ok((Some(entrypoint_args), Some(cmd_args)));
     }
 }
