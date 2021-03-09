@@ -5,7 +5,7 @@ use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerI
 
 use crate::services_impl::faucet::faucet_service::FaucetService;
 
-use super::validator_service::{GOSSIP_PORT, RPC_PORT, ValidatorService};
+use super::validator_service::{INIT_COMPLETE_FILEPATH, GOSSIP_PORT, RPC_PORT, ValidatorService};
 
 const VALIDATOR_BIN_FILEPATH: &str = "/usr/bin/solana-validator";
 
@@ -187,10 +187,12 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
 
         // We need to override the ENTRYPOINT because the Solana image has an ENTRYPOINT we don't want
         let entrypoint_args = vec![
-            String::from(VALIDATOR_BIN_FILEPATH),
+            String::from("sh"),
+            String::from("-c"),
         ];
 
-        let mut cmd_args: Vec<String> = vec![
+        let mut cmd_fragments: Vec<String> = vec![
+            String::from(VALIDATOR_BIN_FILEPATH),
             String::from("--rpc-port"),
             RPC_PORT.to_string(),
             String::from("--public-rpc-address"),
@@ -222,13 +224,19 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             // The PoH speed test is disabled because the validator refuses to start with it enabled, and
             // the Solana devs confirmed that this is fine to skip for local dev clusters
             String::from("--no-poh-speed-test"),
+            String::from("--init-complete-file"),
+            String::from(INIT_COMPLETE_FILEPATH),
+            String::from("--ledger"), 
+            LEDGER_DIR_MOUNTPOINT.to_owned(),
+            String::from("--log"), 
+            format!("/test-volume/{}.log", ip_addr),
         ];
         match self.validator_type {
             ValidatorType::Bootstrapper => {
                 let faucet = self.faucet
                     .context("Bootstrapper service requires a faucet, but no faucet was found")?;
                 let faucet_url = format!("{}:{}", faucet.get_ip_address(), faucet.get_port());
-                cmd_args.append(vec![
+                cmd_fragments.append(vec![
                     String::from("--rpc-faucet-address"), 
                     faucet_url,
                 ].borrow_mut());
@@ -237,7 +245,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 let bootstrapper = self.bootstrapper
                     .context("Validator service requires a bootstrapper, but no bootstrapper was found")?;
                 let bootstrap_gossip_url = format!("{}:{}", bootstrapper.get_ip_address(), GOSSIP_PORT);
-                cmd_args.append(vec![
+                cmd_fragments.append(vec![
                     String::from("--entrypoint"), 
                     bootstrap_gossip_url,
                     String::from("--no-snapshot-fetch"), // Doesn't need to fetch snapshot because it's starting from block 0
@@ -246,12 +254,9 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             },
         }
 
-        cmd_args.append(vec![
-            String::from("--ledger"), 
-            LEDGER_DIR_MOUNTPOINT.to_owned(),
-            String::from("--log"), 
-            String::from("-"),
-        ].borrow_mut());
+        let cmd_args: Vec<String> = vec![
+            cmd_fragments.join(" "),
+        ];
 
         debug!("ENTRYPOINT args: {:?}", entrypoint_args);
         debug!("CMD args: {:?}", cmd_args);

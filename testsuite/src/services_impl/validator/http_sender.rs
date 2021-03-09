@@ -16,6 +16,8 @@ NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE 
 
 use super::{rpc_request::RpcRequest, rpc_sender::RpcSender};
 
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 pub struct HttpSender {
     client: Client,
     url: String,
@@ -23,7 +25,7 @@ pub struct HttpSender {
 
 impl HttpSender {
     pub fn new(url: String) -> Self {
-        Self::new_with_timeout(url, Duration::from_secs(30))
+        Self::new_with_timeout(url, REQUEST_TIMEOUT)
     }
 
     pub fn new_with_timeout(url: String, timeout: Duration) -> Self {
