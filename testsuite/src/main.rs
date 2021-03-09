@@ -45,6 +45,7 @@ async fn main() -> Result<()> {
     let log_level = matches.value_of(LOG_LEVEL_FLAG)
         .context(format!("No '{}' flag provided", LOG_LEVEL_FLAG))?;
 
+    // TODO Debugging
     // >>>>>>>>>>>>>>>>>>> REPLACE WITH YOUR OWN CONFIGURATOR <<<<<<<<<<<<<<<<<<<<<<<<
 	let configurator = SolanaTestsuiteConfigurator::new();
 	// >>>>>>>>>>>>>>>>>>> REPLACE WITH YOUR OWN CONFIGURATOR <<<<<<<<<<<<<<<<<<<<<<<<

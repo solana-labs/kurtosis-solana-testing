@@ -24,8 +24,8 @@ const SKIP_CORRUPTED_RECORD_RECOVERY_MODE: &str = "skip_any_corrupted_record";
 const LEDGER_DIR_MOUNTPOINT: &str = "/ledger";
 
 enum ValidatorType {
-    Bootstrapper,
-    Validator,
+    FirstBootstrapper,
+    ExtraBootstrapper,
 }
 
 pub struct ValidatorContainerInitializer<'obj> {
@@ -38,12 +38,12 @@ pub struct ValidatorContainerInitializer<'obj> {
     faucet_keypair_json_opt: Option<String>, // TODO Delete this when we figure out why it's necessary
     identity_keypair_json: String,
     vote_account_keypair_json: String,
-    bootstrapper: Option<&'obj ValidatorService>,  // Only filled in for non-bootstrappers
-    faucet: Option<&'obj FaucetService>,   // Only used with the bootstrapper
+    first_bootstrapper: Option<&'obj ValidatorService>,  // Only filled in for extra bootstrappers
+    faucet: Option<&'obj FaucetService>,   // Only used with the first bootstrapper
 }
 
 impl<'obj> ValidatorContainerInitializer<'obj> {
-    pub fn for_bootstrapper(
+    pub fn for_first_bootstrapper(
         docker_image: String,
         expected_bank_hash: String,
         expected_genesis_hash: String,
@@ -59,16 +59,16 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
             expected_genesis_hash,
             expected_shred_version,
             ledger_dir_artifact_key,
-            validator_type: ValidatorType::Bootstrapper,
+            validator_type: ValidatorType::FirstBootstrapper,
             faucet_keypair_json_opt: None,
             identity_keypair_json,
             vote_account_keypair_json,
-            bootstrapper: None,
+            first_bootstrapper: None,
             faucet: Some(faucet),
         }
     }
 
-    pub fn for_extra_validator(
+    pub fn for_extra_bootstrapper(
         docker_image: String,
         expected_bank_hash: String,
         expected_genesis_hash: String,
@@ -85,11 +85,11 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
             expected_genesis_hash,
             expected_shred_version,
             ledger_dir_artifact_key,
-            validator_type: ValidatorType::Validator,
+            validator_type: ValidatorType::ExtraBootstrapper,
             faucet_keypair_json_opt: Some(faucet_keypair_json),
             identity_keypair_json,
             vote_account_keypair_json,
-            bootstrapper: Some(bootstrapper),
+            first_bootstrapper: Some(bootstrapper),
             faucet: None,
         }
     }
@@ -125,7 +125,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         result.insert(String::from(VOTE_ACCOUNT_FILE_KEY));
         // TODO Delete when we figure out why we need this
         match self.validator_type {
-            ValidatorType::Validator => {
+            ValidatorType::ExtraBootstrapper => {
                 result.insert(String::from(FAUCET_FILE_KEY));
             },
             _ => {},
@@ -232,18 +232,18 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             format!("/test-volume/{}.log", ip_addr),
         ];
         match self.validator_type {
-            ValidatorType::Bootstrapper => {
+            ValidatorType::FirstBootstrapper => {
                 let faucet = self.faucet
-                    .context("Bootstrapper service requires a faucet, but no faucet was found")?;
+                    .context("First bootstrapper requires a faucet, but no faucet was found")?;
                 let faucet_url = format!("{}:{}", faucet.get_ip_address(), faucet.get_port());
                 cmd_fragments.append(vec![
                     String::from("--rpc-faucet-address"), 
                     faucet_url,
                 ].borrow_mut());
             },
-            ValidatorType::Validator => {
-                let bootstrapper = self.bootstrapper
-                    .context("Validator service requires a bootstrapper, but no bootstrapper was found")?;
+            ValidatorType::ExtraBootstrapper => {
+                let bootstrapper = self.first_bootstrapper
+                    .context("Extra bootstrapper requires a first bootstrapper, but no bootstrapper was found")?;
                 let bootstrap_gossip_url = format!("{}:{}", bootstrapper.get_ip_address(), GOSSIP_PORT);
                 cmd_fragments.append(vec![
                     String::from("--entrypoint"), 
