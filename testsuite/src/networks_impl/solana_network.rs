@@ -60,7 +60,7 @@ impl SolanaNetwork {
         }
     }
 
-    pub fn start_bootstrapper(&mut self, docker_image: &str) -> Result<&ValidatorService> {
+    pub fn start_bootstrapper(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
         let faucet = self.faucet.as_ref()
             .context("Cannot start bootstrapper; no faucet exists in the network")?;
         if self.bootstrapper.is_some() {
@@ -86,15 +86,11 @@ impl SolanaNetwork {
             .context("An error occurred adding the bootstrapper")?;
         info!("Bootstrapper container started");
 
-        info!("Waiting for bootstrapper to become available...");
-        checker.wait_for_startup(&TIME_BETWEEN_POLLS, NUM_RETRIES_FOR_BOOTSTRAPPER)
-            .context("An error occurred waiting for the bootstrapper to become available")?;
-        info!("Bootstrapper available");
-
         self.bootstrapper = Some(*service);
+
         match self.bootstrapper.as_ref() {
-            Some(service_ref) => Ok(service_ref),
-            None => Err(anyhow!(
+            Some(service_ref) => return Ok((service_ref, checker)),
+            None => return Err(anyhow!(
                 "Found no bootstrapper service, even though we just assigned it - this is VERY strange!"
             )),
         }
@@ -105,6 +101,7 @@ impl SolanaNetwork {
         return Ok(result);
     }
 
+    // TODO RENAME TO START BOOTSTRAPPERS (because all nodes that are staked in genesis are bootstrappers)
     pub fn start_extra_validator(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
         let bootstrapper = self.bootstrapper.as_ref()
             .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;

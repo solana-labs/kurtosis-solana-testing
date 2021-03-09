@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use std::{collections::{HashMap, HashSet}, fs::File, io::Write, path::PathBuf};
 
-use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service};
+use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service, service_context::ServiceContext};
 
 use super::faucet_service::{FAUCET_PORT, FaucetService};
 
@@ -21,9 +21,8 @@ impl FaucetContainerInitializer {
         };
     }
 
-    fn create_service(service_id: &str, ip_addr: &str) -> Box<dyn Service> {
-        let service = FaucetService::new(service_id.to_owned(), ip_addr.to_owned());        
-        return Box::new(service);
+    fn create_service(service_context: ServiceContext) -> Box<dyn Service> {
+        return Box::new(FaucetService::new(service_context));
     }
 }
 
@@ -39,7 +38,7 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
         return result;
     }
 
-    fn get_service_wrapping_func(&self) -> Box<dyn Fn(&str, &str) -> Box<dyn Service>> {
+    fn get_service_wrapping_func(&self) -> Box<dyn Fn(ServiceContext) -> Box<dyn Service>> {
         return Box::new(FaucetContainerInitializer::create_service);
     }
 
@@ -73,22 +72,26 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
         return TEST_VOLUME_MOUNTPOINT;
     }
 
-    fn get_start_command(
+    fn get_start_command_overrides(
         &self,
         generated_files: HashMap<String, PathBuf>,
         _: &str
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<(Option<Vec<String>>, Option<Vec<String>>)> {
         let keypair_json_filepath = generated_files.get(KEYPAIR_FILE_KEY)
             .context(format!("Couldn't find file key '{}' in the generated files map", KEYPAIR_FILE_KEY))?;
         let keypair_filepath_str = keypair_json_filepath.to_str()
             .context("Couldn't convert keypair filepath to string")?;
         // TODO Figure out why this has to be on one line - maybe something to do with the image?
-        let command_str = format!("/usr/bin/solana-faucet --keypair={}", keypair_filepath_str);
-        let result = Some(
+        let entrypoint_args = Some(
             vec![
-                command_str,
+                String::from("/usr/bin/solana-faucet"),
             ]
         );
-        return Ok(result);
+        let cmd_args = Some(
+            vec![
+                format!("--keypair={}", keypair_filepath_str)
+            ]
+        );
+        return Ok((entrypoint_args, cmd_args));
     }
 }

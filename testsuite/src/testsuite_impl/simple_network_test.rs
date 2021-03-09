@@ -1,17 +1,18 @@
 use anyhow::{anyhow, Context, Result};
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, thread::sleep, time::Duration};
 
-use kurtosis_rust_lib::{networks::network_context::NetworkContext, services::{availability_checker::AvailabilityChecker, service::Service}, testsuite::{test::Test, test_configuration::TestConfiguration, test_context::TestContext}};
+use kurtosis_rust_lib::{networks::network_context::NetworkContext, services::{availability_checker::AvailabilityChecker}, testsuite::{test::Test, test_configuration::TestConfiguration, test_context::TestContext}};
 
 use crate::networks_impl::{solana_network::SolanaNetwork};
 
+use crate::networks_impl::genesis_config::GENESIS_BOOTSTRAPPER_KEYPAIRS;
 use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
-
-// TODO Parameterize the number of extra nodes???
-const NUM_EXTRA_VALIDATORS: u32 = 1;
 
 const TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_VALIDATOR: u32 = 20;
+
+// We don't always get new transactions produced every second, so we add a little pause to guarantee that we do
+const TIME_BETWEEN_TRANSACTION_COUNT_CHECKS: Duration = Duration::from_secs(2);
 
 
 pub struct SimpleNetworkTest {
@@ -56,22 +57,30 @@ impl Test for SimpleNetworkTest {
             .context("An error occurred starting the faucet")?;
         info!("Faucet started");
 
+        // NOTE: Bootstrapper is a validator that has stake at genesis
         info!("Starting the bootstrapper...");
-        network.start_bootstrapper(&self.docker_image)
+        let (_, bootstrapper_checker) = network.start_bootstrapper(&self.docker_image)
             .context("An error occurred starting the bootstrapper")?;
         info!("Bootstrapper started");
 
-        let mut checkers: Vec<AvailabilityChecker> = Vec::new();
-        for i in 0..NUM_EXTRA_VALIDATORS {
+        let num_extra_validators = GENESIS_BOOTSTRAPPER_KEYPAIRS.len() - 1;
+
+        let mut extra_validator_checkers: Vec<AvailabilityChecker> = Vec::new();
+        for i in 0..num_extra_validators {
             info!("Starting validator #{}...", i);
             let (_, checker) = network.start_extra_validator(&self.docker_image)
                 .context(format!("An error occurred starting validator #{}", i))?;
-            checkers.push(checker);
+            extra_validator_checkers.push(checker);
             info!("Validator #{} started", i);
         }
 
-        // Do availability-checking AFTER starting all the nodes, to speed up setup time
-        for (i, checker) in checkers.iter().enumerate() {
+        // Do availability-checking after starting all the nodes, because the nodes can't ever be up unless all of them
+        // are started due to the genesis having all the nodes as bootstrappers
+        info!("Waiting for bootstrapper validator to become available...");
+        bootstrapper_checker.wait_for_startup(&TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS, NUM_RETRIES_FOR_VALIDATOR)
+            .context(format!("An error occurred waiting for bootstrapper validator to become available"))?;
+        info!("Bootstrapper validator became available");
+        for (i, checker) in extra_validator_checkers.iter().enumerate() {
             info!("Waiting for validator #{} to become available...", i);
             checker.wait_for_startup(&TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS, NUM_RETRIES_FOR_VALIDATOR)
                 .context(format!("An error occurred waiting for validator #{} to become available", i))?;
@@ -84,42 +93,33 @@ impl Test for SimpleNetworkTest {
     fn run(&self, network: Box<SolanaNetwork>, _: TestContext) -> Result<()> {
         let bootstrapper = network.get_bootstrapper()
             .context("An error occurred getting the bootstrapper service")?;
-        // let bootstrapper_client = bootstrapper.get_client();
 
         let extra_validator = network.get_extra_validator(0)
             .context("An error occurred getting the extra validator service")?;
-        // let extra_validator_client = extra_validator.get_client();
 
         // TODO Start with a ledger verification????
 
-        let mut last_transaction_count_opt: Option<u64> = None;
+        let mut last_bootstrapper_transaction_count_opt: Option<u64> = None;
         for i in 0..self.num_iterations {
-            // TODO Verify that we have exactly as many nodes as expected
-            /*
-            echo "--- Node count ($iteration)"
-            (
-                set -x
-                client_keypair=/tmp/client-id.json-$$
-                $solana_keygen new --no-passphrase -fso $client_keypair || exit $?
-                $solana_gossip spy -n 127.0.0.1:8001 --num-nodes-exactly $numNodes || exit $?
-                rm -rf $client_keypair
-            ) || flag_error
-            */
+            info!("Asserting that the network has the correct number of nodes...");
+            bootstrapper.assert_correct_number_of_nodes()
+                .context("An error occurred asserting we have the correct number of nodes")?;
+            info!("Successfully asserted that the network has the correct number of nodes");
 
-            info!("--- RPC API: bootstrap-validator getTransactionCount ({})", i);
+            info!("RPC API: bootstrap-validator getTransactionCount ({})", i);
             let bootstrapper_transaction_count = bootstrapper.get_transaction_count()
                 .context("An error occurred getting the bootstrapper transaction count")?;
             
-            info!("--- RPC API: validator getTransactionCount ({})", i);
+            info!("RPC API: validator getTransactionCount ({})", i);
             let extra_validator_transaction_count = extra_validator.get_transaction_count()
                 .context("An error occurred getting the extra validator transaction count")?;
 
-            match last_transaction_count_opt.as_ref() {
+            match last_bootstrapper_transaction_count_opt.as_ref() {
                 Some(last_transaction_count) => {
-                    info!("--- Bootstrapper transaction count check: {} < {}", last_transaction_count, bootstrapper_transaction_count);
-                    if last_transaction_count > &bootstrapper_transaction_count {
+                    info!("Bootstrapper transaction count check: verifying that last txn count '{}' < bootstrapper txn count '{}'", last_transaction_count, bootstrapper_transaction_count);
+                    if last_transaction_count >= &bootstrapper_transaction_count {
                         return Err(anyhow!(
-                            "Last transaction count '{}' is greater than bootstrapper transaction count '{}'; transaction count is not advancing!",
+                            "Last transaction count '{}' is >= bootstrapper transaction count '{}'; transaction count is not advancing!",
                             last_transaction_count,
                             bootstrapper_transaction_count,
                         ));
@@ -127,7 +127,9 @@ impl Test for SimpleNetworkTest {
                 },
                 _ => {},
             }
-            last_transaction_count_opt = Some(bootstrapper_transaction_count);
+            last_bootstrapper_transaction_count_opt = Some(bootstrapper_transaction_count);
+
+            sleep(TIME_BETWEEN_TRANSACTION_COUNT_CHECKS);
 
             // TODO Wallet sanity check
             /*
@@ -158,7 +160,7 @@ impl Test for SimpleNetworkTest {
     }
 
     fn get_setup_timeout(&self) -> std::time::Duration {
-        return NUM_RETRIES_FOR_VALIDATOR * TIME_BETWEEN_VALIDATOR_AVAILABILITY_POLLS;
+        return Duration::from_secs(300);
     }
 
     fn get_execution_timeout(&self) -> std::time::Duration {

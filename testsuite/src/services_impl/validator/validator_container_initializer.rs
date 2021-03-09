@@ -1,11 +1,13 @@
 use anyhow::{Context, Result, anyhow};
 use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, fs::File, io::Write, path::PathBuf};
 
-use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service};
+use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service, service_context::ServiceContext};
 
 use crate::services_impl::faucet::faucet_service::FaucetService;
 
-use super::validator_service::{GOSSIP_PORT, RPC_PORT, ValidatorService};
+use super::validator_service::{INIT_COMPLETE_FILEPATH, GOSSIP_PORT, RPC_PORT, ValidatorService};
+
+const VALIDATOR_BIN_FILEPATH: &str = "/usr/bin/solana-validator";
 
 const PORT_RANGE_FOR_GOSSIP_START: u32 = 8000;
 const PORT_RANGE_FOR_GOSSIP_END: u32 = 10000;
@@ -92,8 +94,8 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
         }
     }
 
-    fn create_service(service_id: &str, ip_addr: &str) -> Box<dyn Service> {
-        let service = ValidatorService::new(service_id.to_owned(), ip_addr.to_owned());
+    fn create_service(service_context: ServiceContext) -> Box<dyn Service> {
+        let service = ValidatorService::new(service_context);
         return Box::new(service);
     }
 }
@@ -113,7 +115,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         return result;
     }
 
-    fn get_service_wrapping_func(&self) -> Box<dyn Fn(&str, &str) -> Box<dyn kurtosis_rust_lib::services::service::Service>> {
+    fn get_service_wrapping_func(&self) -> Box<dyn Fn(ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service>> {
         return Box::new(ValidatorContainerInitializer::create_service);
     }
 
@@ -169,11 +171,11 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         return TEST_VOLUME_MOUNTPOINT;
     }
 
-    fn get_start_command(
+    fn get_start_command_overrides(
         &self,
         generated_file_filepaths: HashMap<String, PathBuf>,
         ip_addr: &str
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<(Option<Vec<String>>, Option<Vec<String>>)> {
         let identity_filepath = generated_file_filepaths.get(IDENTITY_FILE_KEY)
             .context(format!("Could not find file key '{}' in the generated filepaths map, even though we expected it", IDENTITY_FILE_KEY))?
             .to_str()
@@ -182,13 +184,15 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             .context(format!("Could not find file key '{}' in the generated filepaths map, even though we expected it", VOTE_ACCOUNT_FILE_KEY))?
             .to_str()
             .context(format!("Could not get path string representation of {}", VOTE_ACCOUNT_FILE_KEY))?;
-        let mut command_string: Vec<String> = vec![
-            String::from("set -x"), 
-            String::from("&&"),
+
+        // We need to override the ENTRYPOINT because the Solana image has an ENTRYPOINT we don't want
+        let entrypoint_args = vec![
+            String::from("sh"),
+            String::from("-c"),
         ];
 
-        let mut start_node_cmd: Vec<String> = vec![
-            String::from("/usr/bin/solana-validator"),
+        let mut cmd_fragments: Vec<String> = vec![
+            String::from(VALIDATOR_BIN_FILEPATH),
             String::from("--rpc-port"),
             RPC_PORT.to_string(),
             String::from("--public-rpc-address"),
@@ -217,13 +221,22 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             self.expected_genesis_hash.clone(),
             String::from("--expected-shred-version"),
             self.expected_shred_version.to_string(),
+            // The PoH speed test is disabled because the validator refuses to start with it enabled, and
+            // the Solana devs confirmed that this is fine to skip for local dev clusters
+            String::from("--no-poh-speed-test"),
+            String::from("--init-complete-file"),
+            String::from(INIT_COMPLETE_FILEPATH),
+            String::from("--ledger"), 
+            LEDGER_DIR_MOUNTPOINT.to_owned(),
+            String::from("--log"), 
+            format!("/test-volume/{}.log", ip_addr),
         ];
         match self.validator_type {
             ValidatorType::Bootstrapper => {
                 let faucet = self.faucet
                     .context("Bootstrapper service requires a faucet, but no faucet was found")?;
                 let faucet_url = format!("{}:{}", faucet.get_ip_address(), faucet.get_port());
-                start_node_cmd.append(vec![
+                cmd_fragments.append(vec![
                     String::from("--rpc-faucet-address"), 
                     faucet_url,
                 ].borrow_mut());
@@ -232,7 +245,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 let bootstrapper = self.bootstrapper
                     .context("Validator service requires a bootstrapper, but no bootstrapper was found")?;
                 let bootstrap_gossip_url = format!("{}:{}", bootstrapper.get_ip_address(), GOSSIP_PORT);
-                start_node_cmd.append(vec![
+                cmd_fragments.append(vec![
                     String::from("--entrypoint"), 
                     bootstrap_gossip_url,
                     String::from("--no-snapshot-fetch"), // Doesn't need to fetch snapshot because it's starting from block 0
@@ -241,17 +254,12 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             },
         }
 
-        start_node_cmd.append(vec![
-            String::from("--ledger"), 
-            LEDGER_DIR_MOUNTPOINT.to_owned(),
-            String::from("--log"), 
-            String::from("-"),
-        ].borrow_mut());
+        let cmd_args: Vec<String> = vec![
+            cmd_fragments.join(" "),
+        ];
 
-        command_string.append(start_node_cmd.borrow_mut());
-        // TODO Figure out why this has to be a single string - probably a problem with the image?
-        let command_string_joined = command_string.join(" ");
-        debug!("Command string: {}", command_string_joined);
-        return Ok(Some(vec![command_string_joined]));
+        debug!("ENTRYPOINT args: {:?}", entrypoint_args);
+        debug!("CMD args: {:?}", cmd_args);
+        return Ok((Some(entrypoint_args), Some(cmd_args)));
     }
 }
