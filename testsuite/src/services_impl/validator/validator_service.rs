@@ -1,13 +1,10 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
-use futures::executor::block_on;
 use kurtosis_rust_lib::services::{service::Service, service_context::ServiceContext};
-use reqwest::{header::CONTENT_TYPE};
 use serde_json::{Value, json};
 
 use super::{http_sender::HttpSender, rpc_request::RpcRequest, rpc_sender::RpcSender};
-use crate::networks_impl::genesis_config::GENESIS_BOOTSTRAPPER_KEYPAIRS;
 
 pub (super) const RPC_PORT: u32 = 8899;
 pub (super) const GOSSIP_PORT: u32 = 8001;
@@ -62,7 +59,7 @@ impl ValidatorService {
         return Ok(result);
     }
 
-    pub fn assert_correct_number_of_nodes(&self) -> Result<()> {
+    pub fn assert_correct_number_of_nodes(&self, expected_num_nodes: usize) -> Result<()> {
         let now = SystemTime::now();
         let time_since_epoch = now.duration_since(UNIX_EPOCH)
             .context("Time went backwards")?;
@@ -87,7 +84,7 @@ impl ValidatorService {
             String::from("--gossip-port"),
             format!("{}", GOSSIP_CLI_GOSSIP_PORT),
             String::from("--num-nodes-exactly"),
-            format!("{}", GENESIS_BOOTSTRAPPER_KEYPAIRS.len()),
+            format!("{}", expected_num_nodes),
             String::from("&&"),
             String::from("rm"),
             String::from("-rf"),

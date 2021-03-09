@@ -1,27 +1,24 @@
 use anyhow::{Context, Result, anyhow};
+use core::num;
 use std::{time::Duration};
 
 use kurtosis_rust_lib::{networks::{network::Network, network_context::NetworkContext}, services::availability_checker::AvailabilityChecker};
 
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
-use super::{genesis_bootstrapper_keypairs_provider::GenesisBootstrapperKeypairsProvider};
-use super::genesis_config::{FAUCET_KEYPAIR, BANK_HASH, GENESIS_HASH, SHRED_VERSION};
+use super::genesis_config::{FAUCET_KEYPAIR, BANK_HASH, GENESIS_HASH, SHRED_VERSION, GENESIS_BOOTSTRAPPER_KEYPAIRS};
 
 const FAUCET_SERVICE_ID: &str = "faucet";
-const BOOTSTRAPPER_SERVICE_ID: &str = "bootstrapper";
-const VALIDATOR_SERVICE_ID_PREFIX: &str = "validator-";
+const BOOTSTRAPPER_SERVICE_ID_PREFIX: &str = "bootstrapper-";
 
-const TIME_BETWEEN_POLLS: Duration = Duration::from_secs(5);
-const NUM_RETRIES_FOR_BOOTSTRAPPER: u32 = 30;
+const TIME_BETWEEN_BOOTSTRAPPER_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
+const NUM_RETRIES_FOR_BOOTSTRAPPER_AVAILBILITY: u32 = 30;
 
 pub struct SolanaNetwork {
     network_ctx: NetworkContext,
     ledger_dir_artifact_key: String,
     faucet: Option<FaucetService>,
-    bootstrapper: Option<ValidatorService>,
-    extra_validators: Vec<ValidatorService>,
-    genesis_keypair_provider: GenesisBootstrapperKeypairsProvider,
+    bootstrappers: Vec<ValidatorService>,
 }
 
 impl SolanaNetwork {
@@ -30,114 +27,105 @@ impl SolanaNetwork {
             network_ctx,
             ledger_dir_artifact_key,
             faucet: None,
-            bootstrapper: None,
-            extra_validators: Vec::new(),
-            genesis_keypair_provider: GenesisBootstrapperKeypairsProvider::new(),
+            bootstrappers: Vec::new(),
         }
     }
 
-    pub fn start_faucet(&mut self, docker_image: &str) -> Result<&FaucetService> {
+    pub fn get_num_bootstrappers(&self) -> usize {
+        return GENESIS_BOOTSTRAPPER_KEYPAIRS.len();
+    }
+
+    pub fn start_faucet_and_bootstrappers(&mut self, faucet_docker_image: &str, bootstrapper_docker_image: &str) -> Result<()> {
+        // Validation
         if self.faucet.is_some() {
             return Err(anyhow!(
-                "Cannot add faucet because one already exists",
+                "Cannot start faucet because one already exists",
             ));
         }
+        if self.bootstrappers.len() > 0 {
+            return Err(anyhow!(
+                "Cannot start bootstrappers because some already exist",
+            ))
+        }
+
+        // Start the faucet
         let initializer = FaucetContainerInitializer::new(
-            docker_image.to_owned(),
+            faucet_docker_image.to_owned(),
             FAUCET_KEYPAIR.keypair_json.to_owned(),
         );
         let (service_box, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
             .context("An error occurred adding the faucet")?;
         let service = *service_box;
-        checker.wait_for_startup(&TIME_BETWEEN_POLLS, NUM_RETRIES_FOR_BOOTSTRAPPER)
+        checker.wait_for_startup(&TIME_BETWEEN_BOOTSTRAPPER_AVAILABILITY_POLLS, NUM_RETRIES_FOR_BOOTSTRAPPER_AVAILBILITY)
             .context("An error occurred waiting for the faucet to start")?;
         self.faucet = Some(service);
-        match self.faucet.as_ref() {
-            Some(service_ref) => Ok(service_ref),
-            None => Err(anyhow!(
-                "Found no faucet value, even though we just assigned it - this is VERY strange!"
-            )),
+        let faucet_ref = self.faucet.as_ref()
+            .context("Found no faucet value, even though we just assigned it - this is VERY strange!")?;
+
+        // Start bootstrappers
+        info!("Starting bootstrappers...");
+        let num_bootstrappers = GENESIS_BOOTSTRAPPER_KEYPAIRS.len();
+        let mut bootstrapper_checkers: Vec<AvailabilityChecker> = Vec::new();
+        for i in 0..num_bootstrappers {
+            info!("Starting bootstrapper #{}...", i);
+            let new_bootstrapper_keypairs = GENESIS_BOOTSTRAPPER_KEYPAIRS.get(i)
+                .context(format!("Needed genesis bootstrapper keypair #{}, but genesis config doesn't have that keypair", i))?;
+            let initializer;
+            if i == 0 {
+                initializer = ValidatorContainerInitializer::for_first_bootstrapper(
+                    bootstrapper_docker_image.to_owned(), 
+                    BANK_HASH.to_owned(),
+                    GENESIS_HASH.to_owned(),
+                    SHRED_VERSION,
+                    self.ledger_dir_artifact_key.clone(),
+                    new_bootstrapper_keypairs.identity.keypair_json.to_owned(),
+                    new_bootstrapper_keypairs.vote_account.keypair_json.to_owned(),
+                    faucet_ref,
+                );
+            } else {
+                let first_boostrapper = self.bootstrappers.get(0)
+                    .context("Trying to start an extra bootstrapper, but no first bootstrapper was found")?;
+                initializer = ValidatorContainerInitializer::for_extra_bootstrapper(
+                    bootstrapper_docker_image.to_owned(), 
+                    BANK_HASH.to_owned(),
+                    GENESIS_HASH.to_owned(),
+                    SHRED_VERSION,
+                    self.ledger_dir_artifact_key.clone(),
+                    FAUCET_KEYPAIR.keypair_json.to_owned(),
+                    new_bootstrapper_keypairs.identity.keypair_json.to_owned(),
+                    new_bootstrapper_keypairs.vote_account.keypair_json.to_owned(),
+                    first_boostrapper,
+                );
+
+            }
+            let service_id = format!("{}-{}", BOOTSTRAPPER_SERVICE_ID_PREFIX, i);
+            let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
+                .context(format!("An error occurred adding bootstrapper #{}", i))?;
+            self.bootstrappers.push(*service);
+            bootstrapper_checkers.push(checker);
+            info!("Bootstrapper #{} started", i);
         }
-    }
+        info!("Bootstrappers started");
 
-    pub fn start_bootstrapper(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
-        let faucet = self.faucet.as_ref()
-            .context("Cannot start bootstrapper; no faucet exists in the network")?;
-        if self.bootstrapper.is_some() {
-            return Err(anyhow!(
-                "Cannot start bootstrapper; a bootstrapper already exists in the network",
-            ));
+
+        // Do availability-checking after starting all the nodes, because the nodes can't ever be up unless all of them
+        // are started due to the genesis having all the nodes as bootstrappers
+        info!("Waiting for bootstrappers to become available...");
+        for i in 0..num_bootstrappers {
+            info!("Waiting for bootstrapper #{} to become available...", i);
+            checker.wait_for_startup(&TIME_BETWEEN_BOOTSTRAPPER_AVAILABILITY_POLLS, NUM_RETRIES_FOR_BOOTSTRAPPER_AVAILBILITY)
+                .context(format!("An error occurred waiting for validator #{} to become available", i))?;
+            info!("Bootstrapper #{} became available", i);
         }
+        info!("Bootstrappers available");
 
-        info!("Launching bootstrapper container...");
-        let genesis_keypairs = self.genesis_keypair_provider.get_genesis_bootstrapper_keypairs()
-            .context("Could not get genesis keypairs for new bootstrapper validator node")?;
-        let initializer = ValidatorContainerInitializer::for_bootstrapper(
-            docker_image.to_owned(), 
-            BANK_HASH.to_owned(),
-            GENESIS_HASH.to_owned(),
-            SHRED_VERSION,
-            self.ledger_dir_artifact_key.clone(),
-            genesis_keypairs.identity.keypair_json.to_owned(),
-            genesis_keypairs.vote_account.keypair_json.to_owned(),
-            faucet,
-        );
-        let (service, checker) = self.network_ctx.add_service(BOOTSTRAPPER_SERVICE_ID, &initializer)
-            .context("An error occurred adding the bootstrapper")?;
-        info!("Bootstrapper container started");
-
-        self.bootstrapper = Some(*service);
-
-        match self.bootstrapper.as_ref() {
-            Some(service_ref) => return Ok((service_ref, checker)),
-            None => return Err(anyhow!(
-                "Found no bootstrapper service, even though we just assigned it - this is VERY strange!"
-            )),
-        }
+        return Ok(());
     }
 
-    pub fn get_bootstrapper(&self) -> Result<&ValidatorService> {
-        let result = self.bootstrapper.as_ref().context("No bootstrapper exists")?;
-        return Ok(result);
-    }
-
-    // TODO RENAME TO START BOOTSTRAPPERS (because all nodes that are staked in genesis are bootstrappers)
-    pub fn start_extra_validator(&mut self, docker_image: &str) -> Result<(&ValidatorService, AvailabilityChecker)> {
-        let bootstrapper = self.bootstrapper.as_ref()
-            .context("Cannot start an extra validator without a bootstrapper and no bootstrapper was started")?;
-
-        let new_service_idx = self.extra_validators.len();
-        let service_id = format!("{}{}", VALIDATOR_SERVICE_ID_PREFIX, new_service_idx);
-
-        info!("Launching validator container...");
-        let genesis_keypairs = self.genesis_keypair_provider.get_genesis_bootstrapper_keypairs()
-            .context("Could not get genesis keypairs for new validator node")?;
-        let initializer = ValidatorContainerInitializer::for_extra_validator(
-            docker_image.to_owned(), 
-            BANK_HASH.to_owned(),
-            GENESIS_HASH.to_owned(),
-            SHRED_VERSION,
-            self.ledger_dir_artifact_key.clone(),
-            FAUCET_KEYPAIR.keypair_json.to_owned(),
-            genesis_keypairs.identity.keypair_json.to_owned(),
-            genesis_keypairs.vote_account.keypair_json.to_owned(),
-            bootstrapper,
-        );
-        let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
-            .context(format!("An error occurred adding validator with ID '{}'", service_id))?;
-        info!("Validator container started");
-
-        self.extra_validators.push(*service);
-        let service_ref = self.extra_validators.get(new_service_idx)
-            .context(format!("Found no extra validator service at idx {}, even though we just added it - this is VERY strange!", new_service_idx))?;
-        return Ok((service_ref, checker));
-
-    }
-
-    pub fn get_extra_validator(&self, index: usize) -> Result<&ValidatorService> {
-        let result = self.extra_validators.get(index)
-            .context(format!("An error occurred getting validator at index {}", index))?;
-        return Ok(result);
+    pub fn get_bootstrapper(&self, i: usize) -> Result<&ValidatorService> {
+        let bootstrapper = self.bootstrappers.get(i)
+            .context(format!("Bootstrapper #{} doesn't exist", i))?;
+        return Ok(bootstrapper);
     }
 }
 
