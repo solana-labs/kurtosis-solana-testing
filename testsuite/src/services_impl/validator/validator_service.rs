@@ -19,6 +19,9 @@ const SOLANA_BINARIES_DIRPATH: &str = "/usr/bin";
 const SOLANA_KEYGEN_BIN_FILENAME: &str = "solana-keygen";
 const SOLANA_GOSSIP_BIN_FILENAME: &str = "solana-gossip";
 
+const COMMITMENT_LEVEL_PARAM: &str = "commitment";
+const CONFIRMED_COMMMITMENT_LEVEL: &str = "confirmed";
+
 const SUCCESSFUL_EXIT_CODE: i32 = 0;
 
 pub struct ValidatorService {
@@ -48,18 +51,18 @@ impl ValidatorService {
     //   a) solana-client makes Ledger dependencies optional or
     //   b) Docker-for-Mac supports Linux headers
     // we have to reimplement the client methods
-    pub fn get_transaction_count(&self) -> Result<u64> {
+    pub fn get_confirmed_transaction_count(&self) -> Result<u64> {
         let params = json!([
             {
-                "commitment": "confirmed",
+                COMMITMENT_LEVEL_PARAM: CONFIRMED_COMMMITMENT_LEVEL,
             },
         ]);
         let result = self.send(RpcRequest::GetTransactionCount, params)
-            .context("An error occurred getting the transaction count")?;
+            .context("An error occurred getting the confirmed transaction count")?;
         return Ok(result);
     }
 
-    pub fn assert_correct_number_of_nodes(&self, expected_num_nodes: usize) -> Result<()> {
+    pub fn assert_number_of_nodes(&self, expected_num_nodes: usize) -> Result<()> {
         let now = SystemTime::now();
         let time_since_epoch = now.duration_since(UNIX_EPOCH)
             .context("Time went backwards")?;
@@ -110,6 +113,17 @@ impl ValidatorService {
             ));
         }
         return Ok(());
+    }
+
+    pub fn get_confirmed_slot(&self) -> Result<u64> {
+        let params = json!([
+            {
+                COMMITMENT_LEVEL_PARAM: CONFIRMED_COMMMITMENT_LEVEL,
+            },
+        ]);
+        let result = self.send(RpcRequest::GetSlot, params)
+            .context("An error occurred getting the confirmed slot")?;
+        return Ok(result);
     }
 
     fn send<T>(&self, request: RpcRequest, params: Value) -> Result<T>

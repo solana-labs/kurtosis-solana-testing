@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, anyhow};
 use core::num;
-use std::{time::Duration};
+use std::{collections::{HashMap, HashSet}, time::Duration};
 
-use kurtosis_rust_lib::{networks::{network::Network, network_context::NetworkContext}, services::availability_checker::AvailabilityChecker};
+use kurtosis_rust_lib::{core_api_bindings::api_container_api::{PartitionConnectionInfo, PartitionConnections}, networks::{network::Network, network_context::NetworkContext}, services::availability_checker::AvailabilityChecker};
 
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
@@ -10,6 +10,10 @@ use super::genesis_config::{FAUCET_KEYPAIR, BANK_HASH, GENESIS_HASH, SHRED_VERSI
 
 const FAUCET_SERVICE_ID: &str = "faucet";
 const BOOTSTRAPPER_SERVICE_ID_PREFIX: &str = "bootstrapper-";
+
+const FAUCET_PARTITION_ID: &str = "faucet-partition";
+const BOOTSTRAPPERS_PARTITION1_ID: &str = "bootstrappers-partition1";
+const BOOTSTRAPPERS_PARTITION2_ID: &str = "bootstrappers-partition2";
 
 const TIME_BETWEEN_BOOTSTRAPPER_AVAILABILITY_POLLS: Duration = Duration::from_secs(5);
 const NUM_RETRIES_FOR_BOOTSTRAPPER_AVAILBILITY: u32 = 30;
@@ -98,7 +102,7 @@ impl SolanaNetwork {
                 );
 
             }
-            let service_id = format!("{}-{}", BOOTSTRAPPER_SERVICE_ID_PREFIX, i);
+            let service_id = format!("{}{}", BOOTSTRAPPER_SERVICE_ID_PREFIX, i);
             let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
                 .context(format!("An error occurred adding bootstrapper #{}", i))?;
             self.bootstrappers.push(*service);
@@ -126,6 +130,56 @@ impl SolanaNetwork {
         let bootstrapper = self.bootstrappers.get(i)
             .context(format!("Bootstrapper #{} doesn't exist", i))?;
         return Ok(bootstrapper);
+    }
+
+    /// Splits the network into two halves, with the connection between the halves blocked (or not)
+    pub fn partition_in_half_with_connection(&mut self, is_connection_blocked: bool) -> Result<()> {
+        let mut faucet_partition_services: HashSet<String> = HashSet::new();
+        faucet_partition_services.insert(FAUCET_SERVICE_ID.to_owned());
+
+        let num_bootstrappers = self.get_num_bootstrappers();
+        let first_id_in_second_partition = num_bootstrappers / 2;
+
+        let mut bootstrappers_partition1_services: HashSet<String> = HashSet::new();
+        for i in 0..first_id_in_second_partition {
+            let service_id = SolanaNetwork::get_bootstrapper_service_id(i);
+            bootstrappers_partition1_services.insert(service_id);
+        }
+
+        let mut bootstrappers_partition2_services: HashSet<String> = HashSet::new();
+        for i in first_id_in_second_partition..num_bootstrappers {
+            let service_id = SolanaNetwork::get_bootstrapper_service_id(i);
+            bootstrappers_partition2_services.insert(service_id);
+        }
+
+        let mut partition_services: HashMap<String, HashSet<String>> = HashMap::new();
+        partition_services.insert(FAUCET_PARTITION_ID.to_owned(), faucet_partition_services);
+        partition_services.insert(BOOTSTRAPPERS_PARTITION1_ID.to_owned(), bootstrappers_partition1_services);
+        partition_services.insert(BOOTSTRAPPERS_PARTITION2_ID.to_owned(), bootstrappers_partition2_services);
+
+        let mut bootstrappers_partition1_conns: HashMap<String, PartitionConnectionInfo> = HashMap::new();
+        bootstrappers_partition1_conns.insert(BOOTSTRAPPERS_PARTITION2_ID.to_owned(), PartitionConnectionInfo{
+            is_blocked: is_connection_blocked,
+        });
+
+        let mut partition_connections: HashMap<String, HashMap<String, PartitionConnectionInfo>> = HashMap::new();
+        partition_connections.insert(BOOTSTRAPPERS_PARTITION1_ID.to_owned(), bootstrappers_partition1_conns);
+
+        let default_connection_info = PartitionConnectionInfo{
+            is_blocked: false,
+        };
+
+        self.network_ctx.repartition_network(
+            partition_services, 
+            partition_connections, 
+            default_connection_info,
+        ).context(format!("An error occurred partitioning the network in half, with blocked connection = {}", is_connection_blocked))?;
+
+        return Ok(());
+    }
+
+    fn get_bootstrapper_service_id(i: usize) -> String {
+        return format!("{}{}", BOOTSTRAPPER_SERVICE_ID_PREFIX, i);
     }
 }
 

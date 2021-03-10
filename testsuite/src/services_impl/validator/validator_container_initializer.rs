@@ -221,15 +221,18 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             self.expected_genesis_hash.clone(),
             String::from("--expected-shred-version"),
             self.expected_shred_version.to_string(),
-            // The PoH speed test is disabled because the validator refuses to start with it enabled, and
-            // the Solana devs confirmed that this is fine to skip for local dev clusters
+            // The PoH speed test is disabled because when multiple validators are running on a single machine (i.e.
+            // non-distributed Kurtosis) then things will be too slow. We try to get around this by the ledger being
+            // genesis'd with `--hashes-per-tick sleep` which says "sleep rather than has to mark time" (only applicable
+            // for test clusters though)
             String::from("--no-poh-speed-test"),
             String::from("--init-complete-file"),
             String::from(INIT_COMPLETE_FILEPATH),
             String::from("--ledger"), 
             LEDGER_DIR_MOUNTPOINT.to_owned(),
             String::from("--log"), 
-            format!("/test-volume/{}.log", ip_addr),
+            String::from("-"),
+            // format!("/test-volume/{}.log", ip_addr),
         ];
         match self.validator_type {
             ValidatorType::FirstBootstrapper => {

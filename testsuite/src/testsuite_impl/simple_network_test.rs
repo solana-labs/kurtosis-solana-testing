@@ -65,12 +65,12 @@ impl Test for SimpleNetworkTest {
         let mut last_bootstrapper_transaction_count_opt: Option<u64> = None;
         for i in 0..self.num_iterations {
             info!("Asserting that the network has the correct number of nodes, {}...", expected_num_nodes);
-            first_bootstrapper.assert_correct_number_of_nodes(expected_num_nodes)
+            first_bootstrapper.assert_number_of_nodes(expected_num_nodes)
                 .context(format!("An error occurred asserting that we have the expected number of nodes, '{}'", expected_num_nodes))?;
             info!("Successfully asserted that the network has the correct number of nodes");
 
             info!("RPC API: bootstrap-validator getTransactionCount ({})", i);
-            let bootstrapper_transaction_count = first_bootstrapper.get_transaction_count()
+            let bootstrapper_transaction_count = first_bootstrapper.get_confirmed_transaction_count()
                 .context("An error occurred getting the bootstrapper transaction count")?;
 
             match last_bootstrapper_transaction_count_opt.as_ref() {

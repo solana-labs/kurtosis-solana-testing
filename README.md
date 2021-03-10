@@ -8,8 +8,10 @@ The genesis configuration was created using the following script:
 ```bash
 set -euo pipefail
 
-NUM_BOOTSTRAPPERS=10
+NUM_BOOTSTRAPPERS=5
 KEYPAIRS_DIRPATH="${HOME}/gdrive/project-support/solana-validating-testnet/base58-keypairs"
+SOLANA_CLIS_DIRPATH="$HOME/code/solana/target/debug"
+OUTPUT_LEDGER_DIRPATH="/tmp/ledger-dir"
 
 function get_pubkey_by_index() {
     index="${1}"
@@ -21,11 +23,11 @@ function get_keypair_by_index() {
     cat "${KEYPAIRS_DIRPATH}/keypair${index}.json"
 }
 
-rm -rf /tmp/ledger-dir
+rm -rf "${OUTPUT_LEDGER_DIRPATH}"
 bootstrapper_args=()
 next_key_index=2
 echo "pub const GENESIS_BOOTSTRAPPER_KEYPAIRS: &'static [GenesisBootstrapperKeypairs] = &["
-for i in $(seq 1 10); do
+for i in $(seq 1 "${NUM_BOOTSTRAPPERS}"); do
     identity_pubkey="$(get_pubkey_by_index "${next_key_index}")"
     identity_keypair="$(get_keypair_by_index "${next_key_index}")"
     next_key_index="$((next_key_index + 1))"
@@ -59,15 +61,23 @@ EOF
 done
 echo "];"
 
-$HOME/code/solana/target/debug/solana-genesis \
+# WARNING: Do NOT use --enable-warmup-epochs here!! If it's used, spurious failures will be thrown while under network partition
+"${SOLANA_CLIS_DIRPATH}/solana-genesis" \
     --cluster-type testnet \
-    --enable-warmup-epochs \
+    `# Tells the validators to sleep, rather than hash, in order to form the logical clock` \
+    --hashes-per-tick sleep \
     --faucet-pubkey $(cat ~/gdrive/project-support/solana-validating-testnet/base58-keypairs/pubkey1.txt) \
     ${bootstrapper_args[@]} \
-    --ledger /tmp/ledger-dir \
-    --faucet-lamports "5000000000000"
+    --ledger "${OUTPUT_LEDGER_DIRPATH}" \
+    --faucet-lamports "5000000000000" \
+    > /dev/null
+
+echo "pub const GENESIS_HASH: &str = \"$(RUST_LOG=none "${SOLANA_CLIS_DIRPATH}/solana-ledger-tool" genesis-hash -l "${OUTPUT_LEDGER_DIRPATH}")\";"
+echo "pub const BANK_HASH: &str = \"$(RUST_LOG=none "${SOLANA_CLIS_DIRPATH}/solana-ledger-tool" bank-hash -l "${OUTPUT_LEDGER_DIRPATH}")\";"
+echo "pub const SHRED_VERSION: u64 = $(RUST_LOG=none "${SOLANA_CLIS_DIRPATH}/solana-ledger-tool" shred-version -l "${OUTPUT_LEDGER_DIRPATH}");"
 ```
-with the script printing the exact array that needs to be stored in the `genesis_config.rs` file.
+
+with the script printing the Rust code that needs to be stored in the `genesis_config.rs` file.
 
 The docker images used by Kurtosis for Solana testnets come with these configurations pre-loaded, allowing faucet and bootstrap nodes to start the networks.
 
