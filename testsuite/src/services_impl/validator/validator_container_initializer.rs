@@ -16,7 +16,7 @@ const FAUCET_FILE_KEY: &str = "faucet-keypair";  // TODO Delete this after we fi
 const IDENTITY_FILE_KEY: &str = "identity-keypair";
 const VOTE_ACCOUNT_FILE_KEY: &str = "vote-account-keypair";
 
-const TEST_VOLUME_MOUNTPOINT: &str = "/test-volume";
+pub (super) const TEST_VOLUME_MOUNTPOINT: &str = "/test-volume";
 
 const SKIP_CORRUPTED_RECORD_RECOVERY_MODE: &str = "skip_any_corrupted_record";
 
@@ -232,7 +232,6 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             LEDGER_DIR_MOUNTPOINT.to_owned(),
             String::from("--log"), 
             String::from("-"),
-            // format!("/test-volume/{}.log", ip_addr),
         ];
         match self.validator_type {
             ValidatorType::FirstBootstrapper => {
@@ -256,6 +255,13 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 ].borrow_mut());
             },
         }
+
+        cmd_fragments.append(vec![
+            String::from("2>&1"),
+            String::from("|"),
+            String::from("tee"),
+            format!("{}/{}.log", TEST_VOLUME_MOUNTPOINT, ip_addr),
+        ].borrow_mut());
 
         let cmd_args: Vec<String> = vec![
             cmd_fragments.join(" "),

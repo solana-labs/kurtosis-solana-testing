@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use kurtosis_rust_lib::services::{service::Service, service_context::ServiceContext};
 use serde_json::{Value, json};
 
+use super::validator_container_initializer::TEST_VOLUME_MOUNTPOINT;
 use super::{http_sender::HttpSender, rpc_request::RpcRequest, rpc_sender::RpcSender};
 
 pub (super) const RPC_PORT: u32 = 8899;
@@ -16,6 +17,7 @@ const GET_VERSION_RPC_REQUEST: &str = "{\"jsonrpc\":\"2.0\",\"id\":1, \"method\"
 pub (super) const INIT_COMPLETE_FILEPATH: &str = "/tmp/init-complete.log";
 
 const SOLANA_BINARIES_DIRPATH: &str = "/usr/bin";
+const SOLANA_CLI_BIN_FILENAME: &str = "solana";
 const SOLANA_KEYGEN_BIN_FILENAME: &str = "solana-keygen";
 const SOLANA_GOSSIP_BIN_FILENAME: &str = "solana-gossip";
 
@@ -101,7 +103,7 @@ impl ValidatorService {
         debug!("Command to exec: {:?}", command);
         // REALLY annoying that we have to clone the service_context to use it, but there's no way around it - the underlying
         // Prost-generated gRPC client requires mutability
-        let exit_code = self.service_context.clone().exec_command(command.clone())
+        let (exit_code, _) = self.service_context.clone().exec_command(command.clone())
             .context(format!("An error occurred executing command to assert number of nodes '{:?}'", command))?;
         
         if exit_code != SUCCESSFUL_EXIT_CODE {
@@ -124,6 +126,39 @@ impl ValidatorService {
         let result = self.send(RpcRequest::GetSlot, params)
             .context("An error occurred getting the confirmed slot")?;
         return Ok(result);
+    }
+
+    pub fn dump_leader_schedule_to_file(&self) -> Result<()> {
+        let ip_addr = self.service_context.get_ip_address();
+        let cmd_args = vec![
+            ValidatorService::get_solana_bin_filepath(SOLANA_KEYGEN_BIN_FILENAME),
+            String::from("leader-schedule"),
+            String::from("-u"),
+            format!("http://{}:{}", ip_addr, GOSSIP_PORT),
+            String::from("2>&1"),
+            String::from(">"),
+            format!("{}/leader-schedule-per-{}.txt", TEST_VOLUME_MOUNTPOINT, ip_addr),
+        ];
+        let command: Vec<String> = vec![
+            String::from("sh"),
+            String::from("-c"),
+            cmd_args.join(" "),
+        ];
+        debug!("Command to exec: {:?}", command);
+        // REALLY annoying that we have to clone the service_context to use it, but there's no way around it - the underlying
+        // Prost-generated gRPC client requires mutability
+        let (exit_code, _) = self.service_context.clone().exec_command(command.clone())
+            .context(format!("An error occurred executing command to dump leader schedule to file '{:?}'", command))?;
+        
+        if exit_code != SUCCESSFUL_EXIT_CODE {
+            return Err(anyhow!(
+                "Expected successful exit code '{}' when executing command '{:?}' but got '{}'",
+                SUCCESSFUL_EXIT_CODE,
+                command,
+                exit_code,
+            ));
+        }
+        return Ok(());
     }
 
     fn send<T>(&self, request: RpcRequest, params: Value) -> Result<T>
@@ -153,10 +188,10 @@ impl Service for ValidatorService {
             String::from(INIT_COMPLETE_FILEPATH),
             String::from("]"),
         ];
-        let exit_code_or_err = self.service_context.clone().exec_command(command);
+        let exec_resp_or_err = self.service_context.clone().exec_command(command);
         let exit_code: i32;
-        match exit_code_or_err {
-            Ok(inner_exit_code) => exit_code = inner_exit_code,
+        match exec_resp_or_err {
+            Ok((inner_exit_code, _)) => exit_code = inner_exit_code,
             Err(err) => {
                 debug!("An error occurred executing the command to test if the init file exists: {}", err);
                 return false;

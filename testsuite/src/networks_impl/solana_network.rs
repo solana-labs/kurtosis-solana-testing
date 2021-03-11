@@ -156,6 +156,7 @@ impl SolanaNetwork {
         partition_services.insert(FAUCET_PARTITION_ID.to_owned(), faucet_partition_services);
         partition_services.insert(BOOTSTRAPPERS_PARTITION1_ID.to_owned(), bootstrappers_partition1_services);
         partition_services.insert(BOOTSTRAPPERS_PARTITION2_ID.to_owned(), bootstrappers_partition2_services);
+        debug!("Partition services: {:?}", partition_services);
 
         let mut bootstrappers_partition1_conns: HashMap<String, PartitionConnectionInfo> = HashMap::new();
         bootstrappers_partition1_conns.insert(BOOTSTRAPPERS_PARTITION2_ID.to_owned(), PartitionConnectionInfo{
@@ -164,6 +165,7 @@ impl SolanaNetwork {
 
         let mut partition_connections: HashMap<String, HashMap<String, PartitionConnectionInfo>> = HashMap::new();
         partition_connections.insert(BOOTSTRAPPERS_PARTITION1_ID.to_owned(), bootstrappers_partition1_conns);
+        debug!("Partition connections: {:?}", partition_connections);
 
         let default_connection_info = PartitionConnectionInfo{
             is_blocked: false,
