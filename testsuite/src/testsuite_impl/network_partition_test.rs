@@ -38,7 +38,7 @@ impl NetworkPartitionTest {
         };
     }
 
-    fn get_current_confirmed_slots(bootstrappers: HashMap<usize, &ValidatorService>) -> Result<HashMap<usize, u64>> {
+    fn get_current_confirmed_slots(bootstrappers: &HashMap<usize, &ValidatorService>) -> Result<HashMap<usize, u64>> {
         let mut result = HashMap::new();
         for i in 0..bootstrappers.len() {
             let bootstrapper = bootstrappers[&i];
@@ -50,8 +50,8 @@ impl NetworkPartitionTest {
     }
 
     // Checks if the current slot for each bootstrapper matches the predicate when compared to the last slot for the bootstrapper
-    fn check_if_predicate_matches(is_advancing: bool, last_slots: HashMap<usize, u64>, current_slots: HashMap<usize, u64>) -> bool {
-        let all_predicates_match = true;
+    fn check_if_predicate_matches(is_advancing: bool, last_slots: &HashMap<usize, u64>, current_slots: &HashMap<usize, u64>) -> bool {
+        let mut all_predicates_match = true;
         for i in 0..current_slots.len() {
             let current_slot = current_slots[&i];
             let last_slot = last_slots[&i];
@@ -99,8 +99,8 @@ impl NetworkPartitionTest {
 
         let start_time = Instant::now();
         let error_threshold = start_time + MAX_CLUSTER_SETTLE_TIME;
-        let successive_check_rounds_passed = 0;
-        let last_slots_opt: Option<HashMap<usize, u64>> = None;
+        let mut successive_check_rounds_passed = 0;
+        let mut last_slots_opt: Option<HashMap<usize, u64>> = None;
         loop {
             if Instant::now() >= error_threshold {
                 let expected_state_desc;
@@ -116,11 +116,11 @@ impl NetworkPartitionTest {
                 ));
             }
 
-            let current_slots = NetworkPartitionTest::get_current_confirmed_slots(bootstrappers)
+            let current_slots = NetworkPartitionTest::get_current_confirmed_slots(&bootstrappers)
                 .context("An error occurred getting the current confirmed slots for the bootstrappers")?;
             match last_slots_opt {
                 Some(last_slots) => {
-                    if NetworkPartitionTest::check_if_predicate_matches(true, last_slots, current_slots) {
+                    if NetworkPartitionTest::check_if_predicate_matches(true, &last_slots, &current_slots) {
                         successive_check_rounds_passed += 1;
                     } else {
                         successive_check_rounds_passed = 0;
@@ -165,7 +165,7 @@ impl Test for NetworkPartitionTest {
 
     fn run(&self, mut network: Box<Self::N>, test_ctx: kurtosis_rust_lib::testsuite::test_context::TestContext) -> anyhow::Result<()> {
         info!("Verifying slots are advancing...");
-        NetworkPartitionTest::wait_until_cluster_matches_state(true, network)
+        NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
             .context("An error occurred while waiting for the cluster slots to be advancing")?;
         info!("Slots are advancing");
 
@@ -175,7 +175,7 @@ impl Test for NetworkPartitionTest {
         info!("Network partitioned");
 
         info!("Verifying that slots are no longer advancing...");
-        NetworkPartitionTest::wait_until_cluster_matches_state(true, bootstrappers)
+        NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
             .context("An error occurred while waiting for the cluster slots to stop advancing")?;
         info!("Slots are no longer advancing");
 
@@ -185,7 +185,7 @@ impl Test for NetworkPartitionTest {
         info!("Partition healed");
 
         info!("Verifying slots are advancing once again...");
-        let time_to_advancing = NetworkPartitionTest::wait_until_cluster_matches_state(true, bootstrappers)
+        let time_to_advancing = NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
             .context("An error occurred while waiting for the cluster slots to start advancing again")?;
         info!("Slots started advancing once again in {:?}", time_to_advancing);
 
