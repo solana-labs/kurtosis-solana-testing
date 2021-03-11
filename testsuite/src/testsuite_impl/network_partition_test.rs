@@ -42,8 +42,10 @@ impl NetworkPartitionTest {
         let mut result = HashMap::new();
         for i in 0..bootstrappers.len() {
             let bootstrapper = bootstrappers[&i];
+            debug!("Getting current slot for bootstrapper {}...", i);
             let current_slot = bootstrapper.get_confirmed_slot()
                 .context(format!("An error occurred getting the current confirmed slot for bootstrapper {}", i))?;
+            debug!("Bootstrapper {}'s current slot is {}", i, current_slot);
             result.insert(i, current_slot);
         }
         return Ok(result);
@@ -120,7 +122,7 @@ impl NetworkPartitionTest {
                 .context("An error occurred getting the current confirmed slots for the bootstrappers")?;
             match last_slots_opt {
                 Some(last_slots) => {
-                    if NetworkPartitionTest::check_if_predicate_matches(true, &last_slots, &current_slots) {
+                    if NetworkPartitionTest::check_if_predicate_matches(slots_are_advancing_state, &last_slots, &current_slots) {
                         successive_check_rounds_passed += 1;
                     } else {
                         successive_check_rounds_passed = 0;
@@ -160,6 +162,8 @@ impl Test for NetworkPartitionTest {
         let mut network = SolanaNetwork::new(network_ctx, LEDGER_DIR_ARTIFACT_KEY.to_owned());
         network.start_faucet_and_bootstrappers(&self.docker_image, &self.docker_image)
             .context("An error occurred starting the faucet and bootstrappers")?;
+        // TODO figure out why we need this, since the RPC APIs don't come up in time without it
+        sleep(Duration::from_secs(10));
         return Ok(Box::new(network));
     }
 
@@ -175,9 +179,9 @@ impl Test for NetworkPartitionTest {
         info!("Network partitioned");
 
         info!("Verifying that slots are no longer advancing...");
-        NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
+        let time_to_stop_advancing = NetworkPartitionTest::wait_until_cluster_matches_state(false, &network)
             .context("An error occurred while waiting for the cluster slots to stop advancing")?;
-        info!("Slots are no longer advancing");
+        info!("Slots stopped advancing in {:?}", time_to_stop_advancing);
 
         info!("Healing partition...");
         network.partition_in_half_with_connection(false)
@@ -185,9 +189,9 @@ impl Test for NetworkPartitionTest {
         info!("Partition healed");
 
         info!("Verifying slots are advancing once again...");
-        let time_to_advancing = NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
+        let time_to_advancing_again = NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
             .context("An error occurred while waiting for the cluster slots to start advancing again")?;
-        info!("Slots started advancing once again in {:?}", time_to_advancing);
+        info!("Slots started advancing once again in {:?}", time_to_advancing_again);
 
         return Ok(());
     }

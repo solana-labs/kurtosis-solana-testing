@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
+use futures::executor::block_on;
 use log::*;
-use reqwest::{self, StatusCode, blocking::Client, header::CONTENT_TYPE};
+use reqwest::{self, StatusCode, Client, header::CONTENT_TYPE};
 use serde_json::Value;
 use std::{thread::sleep, time::Duration};
 
@@ -47,15 +48,20 @@ impl RpcSender for HttpSender {
 
         let mut too_many_requests_retries = 5;
         loop {
-            match self
-                .client
+            let req_future = self.client
                 .post(&self.url)
                 .header(CONTENT_TYPE, "application/json")
                 .body(request_json.to_string())
-                .send()
+                .send();
+            let resp_or_err = block_on(req_future);
+            match resp_or_err
             {
                 Ok(response) => {
+                    // TODO DEBUGGING
+                    debug!("Got OK response from send...");
                     if !response.status().is_success() {
+                        // TODO DEBUGGING
+                        debug!("Got not-successful response status");
                         if response.status() == StatusCode::TOO_MANY_REQUESTS
                             && too_many_requests_retries > 0
                         {
@@ -69,11 +75,17 @@ impl RpcSender for HttpSender {
                             sleep(Duration::from_millis(500));
                             continue;
                         }
+                        error!("About to return error due to not-successful response status");
                         return Err(response.error_for_status().unwrap_err().into());
                     }
 
-                    let json: Value = serde_json::from_str(&response.text()?)?;
+                    // TODO  DEBUGGING
+                    debug!("About to read response body...");
+                    let resp_body = block_on(response.text())?;
+                    let json: Value = serde_json::from_str(&resp_body)?;
                     if json["error"].is_object() {
+                        // TODO  DEBUGGING
+                        error!("About to return an error due to an error JSON RPC response");
                         return Err(anyhow!(
                             "An error occurred making the JSON RPC request: {}",
                             json["error"].clone(),
@@ -82,6 +94,8 @@ impl RpcSender for HttpSender {
                     return Ok(json["result"].clone());
                 }
                 Err(err) => {
+                    // TODO DEBUGGING
+                    error!("Err at outermost match arm; the send call is what failed");
                     return Err(err.into());
                 }
             }
