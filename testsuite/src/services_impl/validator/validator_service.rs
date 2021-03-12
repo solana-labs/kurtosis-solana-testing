@@ -103,7 +103,7 @@ impl ValidatorService {
         debug!("Command to exec: {:?}", command);
         // REALLY annoying that we have to clone the service_context to use it, but there's no way around it - the underlying
         // Prost-generated gRPC client requires mutability
-        let (exit_code, _) = self.service_context.clone().exec_command(command.clone())
+        let (exit_code, _) = self.service_context.exec_command(command.clone())
             .context(format!("An error occurred executing command to assert number of nodes '{:?}'", command))?;
         
         if exit_code != SUCCESSFUL_EXIT_CODE {
@@ -128,7 +128,7 @@ impl ValidatorService {
         return Ok(result);
     }
 
-    pub fn dump_leader_schedule_to_file(&self) -> Result<()> {
+    pub fn dump_leader_schedule_to_file(&mut self) -> Result<()> {
         let ip_addr = self.service_context.get_ip_address();
         let cmd_args = vec![
             ValidatorService::get_solana_bin_filepath(SOLANA_KEYGEN_BIN_FILENAME),
@@ -145,9 +145,7 @@ impl ValidatorService {
             cmd_args.join(" "),
         ];
         debug!("Command to exec: {:?}", command);
-        // REALLY annoying that we have to clone the service_context to use it, but there's no way around it - the underlying
-        // Prost-generated gRPC client requires mutability
-        let (exit_code, _) = self.service_context.clone().exec_command(command.clone())
+        let (exit_code, _) = self.service_context.exec_command(command.clone())
             .context(format!("An error occurred executing command to dump leader schedule to file '{:?}'", command))?;
         
         if exit_code != SUCCESSFUL_EXIT_CODE {
@@ -188,7 +186,7 @@ impl Service for ValidatorService {
             String::from(INIT_COMPLETE_FILEPATH),
             String::from("]"),
         ];
-        let exec_resp_or_err = self.service_context.clone().exec_command(command);
+        let exec_resp_or_err = self.service_context.exec_command(command);
         let exit_code: i32;
         match exec_resp_or_err {
             Ok((inner_exit_code, _)) => exit_code = inner_exit_code,

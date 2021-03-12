@@ -93,11 +93,6 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
             faucet: None,
         }
     }
-
-    fn create_service(service_context: ServiceContext) -> Box<dyn Service> {
-        let service = ValidatorService::new(service_context);
-        return Box::new(service);
-    }
 }
 
 impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerInitializer<'obj> {
@@ -115,8 +110,9 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         return result;
     }
 
-    fn get_service_wrapping_func(&self) -> Box<dyn Fn(ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service>> {
-        return Box::new(ValidatorContainerInitializer::create_service);
+    fn get_service(&self, service_context: ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service> {
+        let service = ValidatorService::new(service_context);
+        return Box::new(service);
     }
 
     fn get_files_to_generate(&self) -> std::collections::HashSet<String> {

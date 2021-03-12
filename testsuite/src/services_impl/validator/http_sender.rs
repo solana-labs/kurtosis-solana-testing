@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
-use futures::executor::block_on;
 use log::*;
-use reqwest::{self, StatusCode, Client, header::CONTENT_TYPE};
+use reqwest::{StatusCode, blocking::Client, header::CONTENT_TYPE};
 use serde_json::Value;
 use std::{thread::sleep, time::Duration};
 
@@ -48,12 +47,11 @@ impl RpcSender for HttpSender {
 
         let mut too_many_requests_retries = 5;
         loop {
-            let req_future = self.client
+            let resp_or_err = self.client
                 .post(&self.url)
                 .header(CONTENT_TYPE, "application/json")
                 .body(request_json.to_string())
                 .send();
-            let resp_or_err = block_on(req_future);
             match resp_or_err
             {
                 Ok(response) => {
@@ -81,7 +79,7 @@ impl RpcSender for HttpSender {
 
                     // TODO  DEBUGGING
                     debug!("About to read response body...");
-                    let resp_body = block_on(response.text())?;
+                    let resp_body = response.text()?;
                     let json: Value = serde_json::from_str(&resp_body)?;
                     if json["error"].is_object() {
                         // TODO  DEBUGGING

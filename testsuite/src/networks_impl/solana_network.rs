@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use core::num;
-use std::{collections::{HashMap, HashSet}, time::Duration};
+use std::{collections::{HashMap, HashSet}, rc::Rc, time::Duration};
 
 use kurtosis_rust_lib::{core_api_bindings::api_container_api::{PartitionConnectionInfo, PartitionConnections}, networks::{network::Network, network_context::NetworkContext}, services::availability_checker::AvailabilityChecker};
 
@@ -21,8 +21,8 @@ const NUM_RETRIES_FOR_BOOTSTRAPPER_AVAILBILITY: u32 = 30;
 pub struct SolanaNetwork {
     network_ctx: NetworkContext,
     ledger_dir_artifact_key: String,
-    faucet: Option<FaucetService>,
-    bootstrappers: Vec<ValidatorService>,
+    faucet: Option<Rc<FaucetService>>,
+    bootstrappers: Vec<Rc<ValidatorService>>,
 }
 
 impl SolanaNetwork {
@@ -57,9 +57,8 @@ impl SolanaNetwork {
             faucet_docker_image.to_owned(),
             FAUCET_KEYPAIR.keypair_json.to_owned(),
         );
-        let (service_box, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
+        let (service, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
             .context("An error occurred adding the faucet")?;
-        let service = *service_box;
         checker.wait_for_startup(&TIME_BETWEEN_BOOTSTRAPPER_AVAILABILITY_POLLS, NUM_RETRIES_FOR_BOOTSTRAPPER_AVAILBILITY)
             .context("An error occurred waiting for the faucet to start")?;
         self.faucet = Some(service);
@@ -105,7 +104,7 @@ impl SolanaNetwork {
             let service_id = format!("{}{}", BOOTSTRAPPER_SERVICE_ID_PREFIX, i);
             let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
                 .context(format!("An error occurred adding bootstrapper #{}", i))?;
-            self.bootstrappers.push(*service);
+            self.bootstrappers.push(service);
             bootstrapper_checkers.push(checker);
             info!("Bootstrapper #{} started", i);
         }
