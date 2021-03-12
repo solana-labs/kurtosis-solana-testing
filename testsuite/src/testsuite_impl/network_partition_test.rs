@@ -7,10 +7,6 @@ use crate::{networks_impl::solana_network::SolanaNetwork, services_impl::validat
 
 use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
 
-// We pause for a little bit between checking bootstrapper slots, to give them time to go up
-const PAUSE_BETWEEN_SLOT_CHECKS: Duration = Duration::from_secs(1);
-const NUM_SLOT_VERIFICATION_ROUNDS: u32 = 3;
-
 // This is the maximum amount of time that a cluster might take to settle into its given state after a partition (e.g.
 // for blocks to stop being produced after a partition, or for blocks to start being produced after a partition heals)
 // The cluster will likely settle much faster, but this is the hard limit where we know that if the cluster doesn't settle
@@ -23,7 +19,7 @@ const MAX_CLUSTER_SETTLE_TIME: Duration = Duration::from_secs(60);
 const NUM_SUCCESSIVE_VERIFICATION_CHECKS: usize = 3;
 
 // The time between predicate verification checks
-const PAUSE_BETWEEN_PREDICATE_VERIFICATION_CHECKS: Duration = Duration::from_secs(2);
+const PAUSE_BETWEEN_PREDICATE_VERIFICATION_CHECKS: Duration = Duration::from_secs(1);
 
 pub struct NetworkPartitionTest {
     docker_image: String,

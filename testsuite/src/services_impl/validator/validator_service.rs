@@ -128,37 +128,6 @@ impl ValidatorService {
         return Ok(result);
     }
 
-    pub fn dump_leader_schedule_to_file(&mut self) -> Result<()> {
-        let ip_addr = self.service_context.get_ip_address();
-        let cmd_args = vec![
-            ValidatorService::get_solana_bin_filepath(SOLANA_KEYGEN_BIN_FILENAME),
-            String::from("leader-schedule"),
-            String::from("-u"),
-            format!("http://{}:{}", ip_addr, GOSSIP_PORT),
-            String::from("2>&1"),
-            String::from(">"),
-            format!("{}/leader-schedule-per-{}.txt", TEST_VOLUME_MOUNTPOINT, ip_addr),
-        ];
-        let command: Vec<String> = vec![
-            String::from("sh"),
-            String::from("-c"),
-            cmd_args.join(" "),
-        ];
-        debug!("Command to exec: {:?}", command);
-        let (exit_code, _) = self.service_context.exec_command(command.clone())
-            .context(format!("An error occurred executing command to dump leader schedule to file '{:?}'", command))?;
-        
-        if exit_code != SUCCESSFUL_EXIT_CODE {
-            return Err(anyhow!(
-                "Expected successful exit code '{}' when executing command '{:?}' but got '{}'",
-                SUCCESSFUL_EXIT_CODE,
-                command,
-                exit_code,
-            ));
-        }
-        return Ok(());
-    }
-
     fn send<T>(&self, request: RpcRequest, params: Value) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
