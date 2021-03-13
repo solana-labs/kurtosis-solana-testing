@@ -15,8 +15,7 @@ const CUSTOM_PARAMS_JSON_FLAG: &str = "custom-params-json";
 const KURTOSIS_API_SOCKET_FLAG: &str  = "kurtosis-api-socket";
 const LOG_LEVEL_FLAG: &str = "log-level";
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let matches = App::new("My Super Program")
         .arg(Arg::new(CUSTOM_PARAMS_JSON_FLAG)
             .long(CUSTOM_PARAMS_JSON_FLAG)
@@ -45,7 +44,6 @@ async fn main() -> Result<()> {
     let log_level = matches.value_of(LOG_LEVEL_FLAG)
         .context(format!("No '{}' flag provided", LOG_LEVEL_FLAG))?;
 
-    // TODO Debugging
     // >>>>>>>>>>>>>>>>>>> REPLACE WITH YOUR OWN CONFIGURATOR <<<<<<<<<<<<<<<<<<<<<<<<
 	let configurator = SolanaTestsuiteConfigurator::new();
 	// >>>>>>>>>>>>>>>>>>> REPLACE WITH YOUR OWN CONFIGURATOR <<<<<<<<<<<<<<<<<<<<<<<<
@@ -57,8 +55,10 @@ async fn main() -> Result<()> {
         custom_params_json,
         configurator_box
     );
-    println!("About to execute test...");
-    executor.run().context("An error occurred running the test suite executor")?;
-    println!("Exiting testsuite");
+    let testsuite_result = executor.run();
+    if testsuite_result.is_err() {
+        error!("An error occurred running the test suite executor:");
+        testsuite_result.context("An error occurred running the test suite executor")?;
+    }
     return Ok(());
 }

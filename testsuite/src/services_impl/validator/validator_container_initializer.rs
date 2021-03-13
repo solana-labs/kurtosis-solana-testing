@@ -16,7 +16,7 @@ const FAUCET_FILE_KEY: &str = "faucet-keypair";  // TODO Delete this after we fi
 const IDENTITY_FILE_KEY: &str = "identity-keypair";
 const VOTE_ACCOUNT_FILE_KEY: &str = "vote-account-keypair";
 
-const TEST_VOLUME_MOUNTPOINT: &str = "/test-volume";
+pub (super) const TEST_VOLUME_MOUNTPOINT: &str = "/test-volume";
 
 const SKIP_CORRUPTED_RECORD_RECOVERY_MODE: &str = "skip_any_corrupted_record";
 
@@ -93,11 +93,6 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
             faucet: None,
         }
     }
-
-    fn create_service(service_context: ServiceContext) -> Box<dyn Service> {
-        let service = ValidatorService::new(service_context);
-        return Box::new(service);
-    }
 }
 
 impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerInitializer<'obj> {
@@ -115,8 +110,9 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         return result;
     }
 
-    fn get_service_wrapping_func(&self) -> Box<dyn Fn(ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service>> {
-        return Box::new(ValidatorContainerInitializer::create_service);
+    fn get_service(&self, service_context: ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service> {
+        let service = ValidatorService::new(service_context);
+        return Box::new(service);
     }
 
     fn get_files_to_generate(&self) -> std::collections::HashSet<String> {
@@ -221,15 +217,17 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
             self.expected_genesis_hash.clone(),
             String::from("--expected-shred-version"),
             self.expected_shred_version.to_string(),
-            // The PoH speed test is disabled because the validator refuses to start with it enabled, and
-            // the Solana devs confirmed that this is fine to skip for local dev clusters
+            // The PoH speed test is disabled because when multiple validators are running on a single machine (i.e.
+            // non-distributed Kurtosis) then things will be too slow. We try to get around this by the ledger being
+            // genesis'd with `--hashes-per-tick sleep` which says "sleep rather than has to mark time" (only applicable
+            // for test clusters though)
             String::from("--no-poh-speed-test"),
             String::from("--init-complete-file"),
             String::from(INIT_COMPLETE_FILEPATH),
             String::from("--ledger"), 
             LEDGER_DIR_MOUNTPOINT.to_owned(),
             String::from("--log"), 
-            format!("/test-volume/{}.log", ip_addr),
+            String::from("-"),
         ];
         match self.validator_type {
             ValidatorType::FirstBootstrapper => {
@@ -253,6 +251,13 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
                 ].borrow_mut());
             },
         }
+
+        cmd_fragments.append(vec![
+            String::from("2>&1"),
+            String::from("|"),
+            String::from("tee"),
+            format!("{}/{}.log", TEST_VOLUME_MOUNTPOINT, ip_addr),
+        ].borrow_mut());
 
         let cmd_args: Vec<String> = vec![
             cmd_fragments.join(" "),

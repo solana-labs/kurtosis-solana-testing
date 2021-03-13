@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use log::*;
-use reqwest::{self, StatusCode, blocking::Client, header::CONTENT_TYPE};
+use reqwest::{StatusCode, blocking::Client, header::CONTENT_TYPE};
 use serde_json::Value;
 use std::{thread::sleep, time::Duration};
 
@@ -47,12 +47,12 @@ impl RpcSender for HttpSender {
 
         let mut too_many_requests_retries = 5;
         loop {
-            match self
-                .client
+            let resp_or_err = self.client
                 .post(&self.url)
                 .header(CONTENT_TYPE, "application/json")
                 .body(request_json.to_string())
-                .send()
+                .send();
+            match resp_or_err
             {
                 Ok(response) => {
                     if !response.status().is_success() {
@@ -72,7 +72,8 @@ impl RpcSender for HttpSender {
                         return Err(response.error_for_status().unwrap_err().into());
                     }
 
-                    let json: Value = serde_json::from_str(&response.text()?)?;
+                    let resp_body = response.text()?;
+                    let json: Value = serde_json::from_str(&resp_body)?;
                     if json["error"].is_object() {
                         return Err(anyhow!(
                             "An error occurred making the JSON RPC request: {}",

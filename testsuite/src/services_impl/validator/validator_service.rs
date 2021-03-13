@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use kurtosis_rust_lib::services::{service::Service, service_context::ServiceContext};
 use serde_json::{Value, json};
 
+use super::validator_container_initializer::TEST_VOLUME_MOUNTPOINT;
 use super::{http_sender::HttpSender, rpc_request::RpcRequest, rpc_sender::RpcSender};
 
 pub (super) const RPC_PORT: u32 = 8899;
@@ -16,8 +17,12 @@ const GET_VERSION_RPC_REQUEST: &str = "{\"jsonrpc\":\"2.0\",\"id\":1, \"method\"
 pub (super) const INIT_COMPLETE_FILEPATH: &str = "/tmp/init-complete.log";
 
 const SOLANA_BINARIES_DIRPATH: &str = "/usr/bin";
+const SOLANA_CLI_BIN_FILENAME: &str = "solana";
 const SOLANA_KEYGEN_BIN_FILENAME: &str = "solana-keygen";
 const SOLANA_GOSSIP_BIN_FILENAME: &str = "solana-gossip";
+
+const COMMITMENT_LEVEL_PARAM: &str = "commitment";
+const CONFIRMED_COMMMITMENT_LEVEL: &str = "confirmed";
 
 const SUCCESSFUL_EXIT_CODE: i32 = 0;
 
@@ -48,18 +53,18 @@ impl ValidatorService {
     //   a) solana-client makes Ledger dependencies optional or
     //   b) Docker-for-Mac supports Linux headers
     // we have to reimplement the client methods
-    pub fn get_transaction_count(&self) -> Result<u64> {
+    pub fn get_confirmed_transaction_count(&self) -> Result<u64> {
         let params = json!([
             {
-                "commitment": "confirmed",
+                COMMITMENT_LEVEL_PARAM: CONFIRMED_COMMMITMENT_LEVEL,
             },
         ]);
         let result = self.send(RpcRequest::GetTransactionCount, params)
-            .context("An error occurred getting the transaction count")?;
+            .context("An error occurred getting the confirmed transaction count")?;
         return Ok(result);
     }
 
-    pub fn assert_correct_number_of_nodes(&self, expected_num_nodes: usize) -> Result<()> {
+    pub fn assert_number_of_nodes(&self, expected_num_nodes: usize) -> Result<()> {
         let now = SystemTime::now();
         let time_since_epoch = now.duration_since(UNIX_EPOCH)
             .context("Time went backwards")?;
@@ -98,7 +103,7 @@ impl ValidatorService {
         debug!("Command to exec: {:?}", command);
         // REALLY annoying that we have to clone the service_context to use it, but there's no way around it - the underlying
         // Prost-generated gRPC client requires mutability
-        let exit_code = self.service_context.clone().exec_command(command.clone())
+        let (exit_code, _) = self.service_context.exec_command(command.clone())
             .context(format!("An error occurred executing command to assert number of nodes '{:?}'", command))?;
         
         if exit_code != SUCCESSFUL_EXIT_CODE {
@@ -110,6 +115,17 @@ impl ValidatorService {
             ));
         }
         return Ok(());
+    }
+
+    pub fn get_confirmed_slot(&self) -> Result<u64> {
+        let params = json!([
+            {
+                COMMITMENT_LEVEL_PARAM: CONFIRMED_COMMMITMENT_LEVEL,
+            },
+        ]);
+        let result = self.send(RpcRequest::GetSlot, params)
+            .context("An error occurred getting the confirmed slot")?;
+        return Ok(result);
     }
 
     fn send<T>(&self, request: RpcRequest, params: Value) -> Result<T>
@@ -139,10 +155,10 @@ impl Service for ValidatorService {
             String::from(INIT_COMPLETE_FILEPATH),
             String::from("]"),
         ];
-        let exit_code_or_err = self.service_context.clone().exec_command(command);
+        let exec_resp_or_err = self.service_context.exec_command(command);
         let exit_code: i32;
-        match exit_code_or_err {
-            Ok(inner_exit_code) => exit_code = inner_exit_code,
+        match exec_resp_or_err {
+            Ok((inner_exit_code, _)) => exit_code = inner_exit_code,
             Err(err) => {
                 debug!("An error occurred executing the command to test if the init file exists: {}", err);
                 return false;

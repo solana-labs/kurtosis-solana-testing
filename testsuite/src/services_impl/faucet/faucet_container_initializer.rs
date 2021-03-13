@@ -20,10 +20,6 @@ impl FaucetContainerInitializer {
             keypair_json,
         };
     }
-
-    fn create_service(service_context: ServiceContext) -> Box<dyn Service> {
-        return Box::new(FaucetService::new(service_context));
-    }
 }
 
 impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
@@ -38,8 +34,8 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
         return result;
     }
 
-    fn get_service_wrapping_func(&self) -> Box<dyn Fn(ServiceContext) -> Box<dyn Service>> {
-        return Box::new(FaucetContainerInitializer::create_service);
+    fn get_service(&self, service_context: ServiceContext) -> Box<dyn Service> {
+        return Box::new(FaucetService::new(service_context));
     }
 
     fn get_files_to_generate(&self) -> HashSet<String> {

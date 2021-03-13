@@ -11,8 +11,7 @@ path = "src/main.rs"
 anyhow = "1.0.38"
 clap = "3.0.0-beta.2"
 ed25519-dalek = { version = "1.0.0-pre.4", features = ["serde"] }
-futures = "0.3"
-kurtosis-rust-lib = "1.12.0"
+kurtosis-rust-lib = "1.14.1"
 log = "0.4"
 rand = "0.7.0"  # Needs to match the version used by ed25519-dalek, which (as of 2021-02-25) doesn't use the latest 'rand' version
 reqwest = { version = "0.11.0", features = ["blocking"] }

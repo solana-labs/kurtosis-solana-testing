@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::Context;
 use kurtosis_rust_lib::execution::test_suite_configurator::TestSuiteConfigurator;
 use log::LevelFilter;
-use simplelog::{Config, TermLogger};
+use simplelog::{Config, ConfigBuilder, TermLogger};
 
 use crate::testsuite_impl::solana_testsuite::SolanaTestsuite;
 
@@ -19,9 +19,12 @@ impl SolanaTestsuiteConfigurator {
 
 impl TestSuiteConfigurator for SolanaTestsuiteConfigurator {
     fn set_log_level(&self, log_level_str: &str) -> anyhow::Result<()> {
+        let config = ConfigBuilder::new()
+            .set_time_format_str("%+") // From https://docs.rs/chrono/0.4.0/chrono/format/strftime/index.html#specifiers
+            .build();
         let level_filter = LevelFilter::from_str(log_level_str)
             .context(format!("Could not parse log level str '{}' to a log level filter", log_level_str))?;
-        TermLogger::init(level_filter, Config::default(), simplelog::TerminalMode::Mixed)
+        TermLogger::init(level_filter, config, simplelog::TerminalMode::Mixed)
             .context("An error occurred initializing the logger")?;
         return Ok(());
     }
