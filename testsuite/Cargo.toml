@@ -10,8 +10,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.38"
 clap = "3.0.0-beta.2"
-ed25519-dalek = { version = "1.0.0-pre.4", features = ["serde"] }
 kurtosis-rust-lib = "1.14.1"
+smallest-uint = "0.1.1" # TODO DEBUGGING
 log = "0.4"
 rand = "0.7.0"  # Needs to match the version used by ed25519-dalek, which (as of 2021-02-25) doesn't use the latest 'rand' version
 reqwest = { version = "0.11.0", features = ["blocking"] }
