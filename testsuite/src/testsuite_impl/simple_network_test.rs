@@ -101,6 +101,6 @@ impl Test for SimpleNetworkTest {
     }
 
     fn get_execution_timeout(&self) -> std::time::Duration {
-        return Duration::from_secs(60);
+        return Duration::from_secs(240);
     }
 }
