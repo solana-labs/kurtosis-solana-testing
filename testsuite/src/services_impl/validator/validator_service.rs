@@ -1,10 +1,8 @@
-use std::{borrow::BorrowMut, rc::Rc, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{borrow::BorrowMut, time::{SystemTime, UNIX_EPOCH}};
 
 use anyhow::{anyhow, Context, Result};
 use kurtosis_rust_lib::services::{service::Service, service_context::ServiceContext};
 use serde_json::{Value, json};
-
-use crate::services_impl::faucet::faucet_service::FaucetService;
 
 use super::validator_container_initializer::FAUCET_KEYPAIR_FILEPATH;
 use super::{http_sender::HttpSender, rpc_request::RpcRequest, rpc_sender::RpcSender};
@@ -12,9 +10,6 @@ use super::{http_sender::HttpSender, rpc_request::RpcRequest, rpc_sender::RpcSen
 pub (super) const RPC_PORT: u32 = 8899;
 pub (super) const GOSSIP_PORT: u32 = 8001;
 const GOSSIP_CLI_GOSSIP_PORT: u32 = 9000;
-const TIMEOUT: Duration = Duration::from_secs(60);
-const JSON_CONTENT_TYPE: &str = "application/json";
-const GET_VERSION_RPC_REQUEST: &str = "{\"jsonrpc\":\"2.0\",\"id\":1, \"method\":\"getVersion\"}";
 
 pub (super) const INIT_COMPLETE_FILEPATH: &str = "/tmp/init-complete.log";
 
@@ -31,16 +26,14 @@ const SUCCESSFUL_EXIT_CODE: i32 = 0;
 pub struct ValidatorService {
     service_context: ServiceContext,
     sender: Box<dyn RpcSender>,
-    faucet: Rc<FaucetService>,
 }
 
 impl ValidatorService {
-    pub fn new(service_context: ServiceContext, faucet: Rc<FaucetService>) -> ValidatorService {
+    pub fn new(service_context: ServiceContext) -> ValidatorService {
         let url = format!("http://{}:{}", service_context.get_ip_address(), RPC_PORT);
         return ValidatorService{
             service_context,
             sender: Box::new(HttpSender::new(url)),
-            faucet,
         };
     }
 
@@ -132,6 +125,7 @@ impl ValidatorService {
         return Ok(result);
     }
 
+    // Port of https://github.com/solana-labs/solana/blob/master/scripts/wallet-sanity.sh
     pub fn run_wallet_sanity_check(&self) -> Result<()> {
         let solana_cli_filepath = ValidatorService::get_solana_bin_filepath(SOLANA_CLI_BIN_FILENAME);
         let cli_args: Vec<String> = vec![
@@ -142,7 +136,6 @@ impl ValidatorService {
             FAUCET_KEYPAIR_FILEPATH.to_owned(),
         ];
 
-        // The subcommands that will be run for the sanity check
         let all_subcommand_args: Vec<Vec<String>> = vec![
             vec![String::from("address")],
             vec![String::from("balance")],

@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, convert::TryInto, thread::sleep, time::{Duration, Instant}};
+use std::{collections::{HashMap}, convert::TryInto, thread::sleep, time::{Duration, Instant}};
 
 use anyhow::{anyhow, Context, Result};
 use kurtosis_rust_lib::testsuite::{test::Test, test_configuration::TestConfiguration};
@@ -32,7 +32,7 @@ pub struct NetworkPartitionTest {
 }
 
 impl NetworkPartitionTest {
-    pub fn new(docker_image: String, num_partitioning_rounds: u32) -> NetworkPartitionTest {
+    pub fn new(docker_image: String) -> NetworkPartitionTest {
         return NetworkPartitionTest{
             docker_image,
         };

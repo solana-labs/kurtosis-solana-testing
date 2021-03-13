@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, fs::File, io::Write, path::PathBuf, rc::Rc};
 
-use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service, service_context::ServiceContext};
+use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service_context::ServiceContext};
 
 use crate::services_impl::faucet::faucet_service::FaucetService;
 
@@ -75,7 +75,6 @@ impl<'obj> ValidatorContainerInitializer {
         expected_genesis_hash: String,
         expected_shred_version: u64,
         ledger_dir_artifact_key: String,
-        faucet_keypair_json: String,
         identity_keypair_json: String,
         vote_account_keypair_json: String,
         faucet: Rc<FaucetService>,
@@ -112,7 +111,7 @@ impl DockerContainerInitializer<ValidatorService> for ValidatorContainerInitiali
     }
 
     fn get_service(&self, service_context: ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service> {
-        let service = ValidatorService::new(service_context, self.faucet.clone());
+        let service = ValidatorService::new(service_context);
         return Box::new(service);
     }
 

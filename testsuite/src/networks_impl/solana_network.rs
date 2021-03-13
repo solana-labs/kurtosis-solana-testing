@@ -91,7 +91,6 @@ impl SolanaNetwork {
                     GENESIS_HASH.to_owned(),
                     SHRED_VERSION,
                     self.ledger_dir_artifact_key.clone(),
-                    FAUCET_KEYPAIR.keypair_json.to_owned(),
                     new_bootstrapper_keypairs.identity.keypair_json.to_owned(),
                     new_bootstrapper_keypairs.vote_account.keypair_json.to_owned(),
                     faucet.clone(),
@@ -100,9 +99,9 @@ impl SolanaNetwork {
 
             }
             let service_id = format!("{}{}", BOOTSTRAPPER_SERVICE_ID_PREFIX, i);
-            let (service, checker) = self.network_ctx.add_service(&service_id, &initializer)
+            let (bootstrapper, checker) = self.network_ctx.add_service(&service_id, &initializer)
                 .context(format!("An error occurred adding bootstrapper #{}", i))?;
-            self.bootstrappers.push(service);
+            self.bootstrappers.push(bootstrapper);
             bootstrapper_checkers.push(checker);
             info!("Bootstrapper #{} started", i);
         }

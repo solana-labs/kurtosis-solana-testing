@@ -10,9 +10,6 @@ use super::{network_partition_test::NetworkPartitionTest, simple_network_test};
 pub (super) const LEDGER_DIR_ARTIFACT_KEY: &str = "ledger-dir";
 pub (super) const LEDGER_DIR_ARTIFACT_URL: &str = "https://kurtosis-public-access.s3.us-east-1.amazonaws.com/client-artifacts/solana/test-ledger.tgz";
 
-const SANITY_CHECK_NUM_ITERATIONS: u32 = 3;
-const NETWORK_PARTITIONING_ROUNDS: u32 = 3;
-
 pub struct SolanaTestsuite {
     normal_image: String,
 }
@@ -31,7 +28,6 @@ impl TestSuite for SolanaTestsuite {
 
         let simple_network_test = SimpleNetworkTest::new(
             self.normal_image.clone(), 
-            SANITY_CHECK_NUM_ITERATIONS,
         );
         let simple_network_test_container = DynTestContainer::new(simple_network_test);
         result.insert(
@@ -41,7 +37,6 @@ impl TestSuite for SolanaTestsuite {
 
         let network_partition_test = NetworkPartitionTest::new(
             self.normal_image.clone(), 
-            SANITY_CHECK_NUM_ITERATIONS,
         );
         let network_partition_test_container = DynTestContainer::new(network_partition_test);
         result.insert(
