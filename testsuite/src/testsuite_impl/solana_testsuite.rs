@@ -5,8 +5,6 @@ use simple_network_test::SimpleNetworkTest;
 
 use super::{network_partition_test::NetworkPartitionTest, simple_network_test};
 
-// TODO Formalize these at the testsuite level in Kurtosis itself
-// See: https://github.com/kurtosis-tech/kurtosis-libs/issues/33
 pub (super) const LEDGER_DIR_ARTIFACT_KEY: &str = "ledger-dir";
 pub (super) const LEDGER_DIR_ARTIFACT_URL: &str = "https://kurtosis-public-access.s3.us-east-1.amazonaws.com/client-artifacts/solana/test-ledger.tgz";
 
