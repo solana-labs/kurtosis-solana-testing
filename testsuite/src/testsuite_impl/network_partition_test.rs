@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, convert::TryInto, thread::sleep, time::{Duration, Instant}};
+use std::{collections::{HashMap}, convert::TryInto, thread::sleep, time::{Duration, Instant}};
 
 use anyhow::{anyhow, Context, Result};
 use kurtosis_rust_lib::testsuite::{test::Test, test_configuration::TestConfiguration};
@@ -32,7 +32,7 @@ pub struct NetworkPartitionTest {
 }
 
 impl NetworkPartitionTest {
-    pub fn new(docker_image: String, num_partitioning_rounds: u32) -> NetworkPartitionTest {
+    pub fn new(docker_image: String) -> NetworkPartitionTest {
         return NetworkPartitionTest{
             docker_image,
         };
@@ -162,7 +162,8 @@ impl Test for NetworkPartitionTest {
         let mut network = SolanaNetwork::new(network_ctx, LEDGER_DIR_ARTIFACT_KEY.to_owned());
         network.start_faucet_and_bootstrappers(&self.docker_image, &self.docker_image)
             .context("An error occurred starting the faucet and bootstrappers")?;
-        // TODO figure out why we need this, since the RPC APIs don't come up in time without it
+        // TODO figure out why we need this, since the RPC APIs don't come up in time without it - maybe
+        // add an RPC check in hte is_available method of the validator service?
         sleep(Duration::from_secs(10));
         return Ok(Box::new(network));
     }

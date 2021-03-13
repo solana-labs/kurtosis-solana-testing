@@ -4,12 +4,14 @@ pub (super) const FAUCET_PORT: u32 = 9900;
 
 pub struct FaucetService {
     service_context: ServiceContext,
+    keypair_json: String,
 }
 
 impl FaucetService {
-    pub fn new(service_context: ServiceContext) -> FaucetService {
+    pub fn new(service_context: ServiceContext, keypair_json: String) -> FaucetService {
         return FaucetService{
             service_context,
+            keypair_json,
         };
     }
 
@@ -19,6 +21,10 @@ impl FaucetService {
 
     pub fn get_port(&self) -> u32 {
         return FAUCET_PORT;
+    }
+
+    pub fn get_keypair_json(&self) -> String {
+        return self.keypair_json.clone();
     }
 }
 

@@ -35,7 +35,7 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
     }
 
     fn get_service(&self, service_context: ServiceContext) -> Box<dyn Service> {
-        return Box::new(FaucetService::new(service_context));
+        return Box::new(FaucetService::new(service_context, self.keypair_json.clone()));
     }
 
     fn get_files_to_generate(&self) -> HashSet<String> {
@@ -77,7 +77,6 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
             .context(format!("Couldn't find file key '{}' in the generated files map", KEYPAIR_FILE_KEY))?;
         let keypair_filepath_str = keypair_json_filepath.to_str()
             .context("Couldn't convert keypair filepath to string")?;
-        // TODO Figure out why this has to be on one line - maybe something to do with the image?
         let entrypoint_args = Some(
             vec![
                 String::from("/usr/bin/solana-faucet"),

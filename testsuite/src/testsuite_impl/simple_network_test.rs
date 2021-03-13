@@ -1,27 +1,25 @@
 use anyhow::{anyhow, Context, Result};
 use std::{collections::HashMap, thread::sleep, time::Duration};
 
-use kurtosis_rust_lib::{networks::network_context::NetworkContext, services::{availability_checker::AvailabilityChecker}, testsuite::{test::Test, test_configuration::TestConfiguration, test_context::TestContext}};
+use kurtosis_rust_lib::{networks::network_context::NetworkContext, testsuite::{test::Test, test_configuration::TestConfiguration, test_context::TestContext}};
 
-use crate::networks_impl::{solana_network::SolanaNetwork};
+use crate::{networks_impl::{solana_network::SolanaNetwork}, };
 
 use super::solana_testsuite::{LEDGER_DIR_ARTIFACT_KEY, LEDGER_DIR_ARTIFACT_URL};
 
 // We don't always get new transactions produced every second, so we add a little pause to guarantee that we do
 const TIME_BETWEEN_TRANSACTION_COUNT_CHECKS: Duration = Duration::from_secs(2);
 
+const NUM_CHECK_ITERATIONS: u32 = 3;
 
 pub struct SimpleNetworkTest {
     docker_image: String,
-    num_iterations: u32,
-    // TODO parameterize with a restart interval every K iterations
 }
 
 impl SimpleNetworkTest {
-    pub fn new(docker_image: String, num_iterations: u32) -> SimpleNetworkTest {
+    pub fn new(docker_image: String) -> SimpleNetworkTest {
         return SimpleNetworkTest{
             docker_image,
-            num_iterations,
         };
     }
 }
@@ -58,12 +56,10 @@ impl Test for SimpleNetworkTest {
         let first_bootstrapper = network.get_bootstrapper(0)
             .context("An error occurred getting the first bootstrapper")?;
 
-        // TODO Start with a ledger verification????
-
         let expected_num_nodes = network.get_num_bootstrappers();
 
         let mut last_bootstrapper_transaction_count_opt: Option<u64> = None;
-        for i in 0..self.num_iterations {
+        for i in 0..NUM_CHECK_ITERATIONS {
             info!("Asserting that the network has the correct number of nodes, {}...", expected_num_nodes);
             first_bootstrapper.assert_number_of_nodes(expected_num_nodes)
                 .context(format!("An error occurred asserting that we have the expected number of nodes, '{}'", expected_num_nodes))?;
@@ -88,31 +84,13 @@ impl Test for SimpleNetworkTest {
             }
             last_bootstrapper_transaction_count_opt = Some(bootstrapper_transaction_count);
 
+            // Wallet sanity check
+            info!("Running wallet sanity check...");
+            first_bootstrapper.run_wallet_sanity_check()
+                .context("An error occurred running the wallet sanity check")?;
+            info!("Wallet sanity check passed");
+
             sleep(TIME_BETWEEN_TRANSACTION_COUNT_CHECKS);
-
-            // TODO Wallet sanity check
-            /*
-            echo "--- Wallet sanity ($iteration)"
-            (
-                set -x
-                timeout 60s scripts/wallet-sanity.sh --url http://127.0.0.1"$walletRpcPort"
-            ) || flag_error
-
-            iteration=$((iteration + 1))
-            */
-
-            // TODO Restart nodes if they hit a specific iteration
-            /*
-            if [[ $restartInterval != never && $((iteration % restartInterval)) -eq 0 ]]; then
-                if $rollingRestart; then
-                    rollingNodeRestart
-                else
-                    killNodes
-                    verifyLedger
-                    startNodes
-                fi
-            fi
-            */
         }
 
         return Ok(());
