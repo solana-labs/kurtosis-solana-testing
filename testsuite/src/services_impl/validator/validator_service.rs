@@ -1,10 +1,12 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{borrow::BorrowMut, rc::Rc, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use anyhow::{anyhow, Context, Result};
 use kurtosis_rust_lib::services::{service::Service, service_context::ServiceContext};
 use serde_json::{Value, json};
 
-use super::validator_container_initializer::TEST_VOLUME_MOUNTPOINT;
+use crate::services_impl::faucet::faucet_service::FaucetService;
+
+use super::validator_container_initializer::FAUCET_KEYPAIR_FILEPATH;
 use super::{http_sender::HttpSender, rpc_request::RpcRequest, rpc_sender::RpcSender};
 
 pub (super) const RPC_PORT: u32 = 8899;
@@ -29,14 +31,16 @@ const SUCCESSFUL_EXIT_CODE: i32 = 0;
 pub struct ValidatorService {
     service_context: ServiceContext,
     sender: Box<dyn RpcSender>,
+    faucet: Rc<FaucetService>,
 }
 
 impl ValidatorService {
-    pub fn new(service_context: ServiceContext) -> ValidatorService {
+    pub fn new(service_context: ServiceContext, faucet: Rc<FaucetService>) -> ValidatorService {
         let url = format!("http://{}:{}", service_context.get_ip_address(), RPC_PORT);
         return ValidatorService{
             service_context,
             sender: Box::new(HttpSender::new(url)),
+            faucet,
         };
     }
 
@@ -126,6 +130,61 @@ impl ValidatorService {
         let result = self.send(RpcRequest::GetSlot, params)
             .context("An error occurred getting the confirmed slot")?;
         return Ok(result);
+    }
+
+    pub fn run_wallet_sanity_check(&self) -> Result<()> {
+        let solana_cli_filepath = ValidatorService::get_solana_bin_filepath(SOLANA_CLI_BIN_FILENAME);
+        let cli_args: Vec<String> = vec![
+            solana_cli_filepath,
+            String::from("--url"),
+            format!("http://{}:{}", self.service_context.get_ip_address(), RPC_PORT),
+            String::from("--keypair"),
+            FAUCET_KEYPAIR_FILEPATH.to_owned(),
+        ];
+
+        // The subcommands that will be run for the sanity check
+        let all_subcommand_args: Vec<Vec<String>> = vec![
+            vec![String::from("address")],
+            vec![String::from("balance")],
+            vec![
+                String::from("ping"),
+                String::from("--count"), 
+                String::from("5"), 
+                String::from("--interval"), 
+                String::from("0")
+            ],
+            vec![String::from("balance")],
+        ];
+
+        for subcommand_args in all_subcommand_args {
+            let mut cmd_args = cli_args.clone();
+            cmd_args.append(subcommand_args.clone().borrow_mut());
+            let cmd: Vec<String> = vec![
+                String::from("sh"),
+                String::from("-c"),
+                cmd_args.join(" "),
+            ];
+            let (exit_code, log_bytes) = self.service_context.exec_command(cmd.clone())
+                .context(format!("An error occurred executing command '{:?}'", cmd))?;
+            if exit_code != SUCCESSFUL_EXIT_CODE {
+                error!("Wallet sanity check command '{:?}' exited with error code {}:", cmd, exit_code);
+                let log_str_or_err = String::from_utf8(log_bytes);
+                match log_str_or_err {
+                    Ok(str) => {
+                        error!("{}", str);
+                    }
+                    Err(_) => {
+                        error!("Could not print command logs; an error occurred decoding command log bytes to string using UTF8");
+                    }
+                }
+                return Err(anyhow!(
+                    "Command '{:?}' to run wallet sanity check exited with error code {}", 
+                    cmd, 
+                    exit_code
+                ));
+            }
+        }
+        return Ok(());
     }
 
     fn send<T>(&self, request: RpcRequest, params: Value) -> Result<T>

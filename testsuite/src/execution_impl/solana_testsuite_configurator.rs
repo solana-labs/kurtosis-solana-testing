@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::Context;
 use kurtosis_rust_lib::execution::test_suite_configurator::TestSuiteConfigurator;
 use log::LevelFilter;
-use simplelog::{Config, ConfigBuilder, TermLogger};
+use simplelog::{ConfigBuilder, TermLogger};
 
 use crate::testsuite_impl::solana_testsuite::SolanaTestsuite;
 

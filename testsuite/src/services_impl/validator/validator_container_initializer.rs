@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, fs::File, io::Write, path::PathBuf};
+use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, fs::File, io::Write, path::PathBuf, rc::Rc};
 
 use kurtosis_rust_lib::services::{docker_container_initializer::DockerContainerInitializer, service::Service, service_context::ServiceContext};
 
@@ -12,7 +12,6 @@ const VALIDATOR_BIN_FILEPATH: &str = "/usr/bin/solana-validator";
 const PORT_RANGE_FOR_GOSSIP_START: u32 = 8000;
 const PORT_RANGE_FOR_GOSSIP_END: u32 = 10000;
 
-const FAUCET_FILE_KEY: &str = "faucet-keypair";  // TODO Delete this after we figure out why it's needed
 const IDENTITY_FILE_KEY: &str = "identity-keypair";
 const VOTE_ACCOUNT_FILE_KEY: &str = "vote-account-keypair";
 
@@ -23,26 +22,29 @@ const SKIP_CORRUPTED_RECORD_RECOVERY_MODE: &str = "skip_any_corrupted_record";
 // Where to mount the ledger directory on the validator container
 const LEDGER_DIR_MOUNTPOINT: &str = "/ledger";
 
+// Every validator can potentially run the wallet sanity check, which means they need the faucet keypair
+// Thus, we write the faucet keypair to every validator's filesystem in preparation
+pub (super) const FAUCET_KEYPAIR_FILEPATH: &str = "/faucet-keypair.json";
+
 enum ValidatorType {
     FirstBootstrapper,
     ExtraBootstrapper,
 }
 
-pub struct ValidatorContainerInitializer<'obj> {
+pub struct ValidatorContainerInitializer {
 	docker_image: String,
     expected_bank_hash: String,
     expected_genesis_hash: String,
     expected_shred_version: u64,
     ledger_dir_artifact_key: String,
     validator_type: ValidatorType,
-    faucet_keypair_json_opt: Option<String>, // TODO Delete this when we figure out why it's necessary
     identity_keypair_json: String,
     vote_account_keypair_json: String,
-    first_bootstrapper: Option<&'obj ValidatorService>,  // Only filled in for extra bootstrappers
-    faucet: Option<&'obj FaucetService>,   // Only used with the first bootstrapper
+    faucet: Rc<FaucetService>,
+    first_bootstrapper: Option<Rc<ValidatorService>>,  // Only filled in for extra bootstrappers
 }
 
-impl<'obj> ValidatorContainerInitializer<'obj> {
+impl<'obj> ValidatorContainerInitializer {
     pub fn for_first_bootstrapper(
         docker_image: String,
         expected_bank_hash: String,
@@ -51,7 +53,7 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
         ledger_dir_artifact_key: String,
         identity_keypair_json: String,
         vote_account_keypair_json: String,
-        faucet: &'obj FaucetService,
+        faucet: Rc<FaucetService>,
     ) -> ValidatorContainerInitializer {
         return ValidatorContainerInitializer{
             docker_image,
@@ -60,11 +62,10 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
             expected_shred_version,
             ledger_dir_artifact_key,
             validator_type: ValidatorType::FirstBootstrapper,
-            faucet_keypair_json_opt: None,
             identity_keypair_json,
             vote_account_keypair_json,
             first_bootstrapper: None,
-            faucet: Some(faucet),
+            faucet: faucet,
         }
     }
 
@@ -77,7 +78,8 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
         faucet_keypair_json: String,
         identity_keypair_json: String,
         vote_account_keypair_json: String,
-        bootstrapper: &'obj ValidatorService,
+        faucet: Rc<FaucetService>,
+        bootstrapper: Rc<ValidatorService>,
     ) -> ValidatorContainerInitializer {
         return ValidatorContainerInitializer{
             docker_image,
@@ -86,16 +88,15 @@ impl<'obj> ValidatorContainerInitializer<'obj> {
             expected_shred_version,
             ledger_dir_artifact_key,
             validator_type: ValidatorType::ExtraBootstrapper,
-            faucet_keypair_json_opt: Some(faucet_keypair_json),
             identity_keypair_json,
             vote_account_keypair_json,
             first_bootstrapper: Some(bootstrapper),
-            faucet: None,
+            faucet: faucet,
         }
     }
 }
 
-impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerInitializer<'obj> {
+impl DockerContainerInitializer<ValidatorService> for ValidatorContainerInitializer {
     fn get_docker_image(&self) -> &str {
         return &self.docker_image;
     }
@@ -111,7 +112,7 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
     }
 
     fn get_service(&self, service_context: ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service> {
-        let service = ValidatorService::new(service_context);
+        let service = ValidatorService::new(service_context, self.faucet.clone());
         return Box::new(service);
     }
 
@@ -119,13 +120,6 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         let mut result = HashSet::new();
         result.insert(String::from(IDENTITY_FILE_KEY));
         result.insert(String::from(VOTE_ACCOUNT_FILE_KEY));
-        // TODO Delete when we figure out why we need this
-        match self.validator_type {
-            ValidatorType::ExtraBootstrapper => {
-                result.insert(String::from(FAUCET_FILE_KEY));
-            },
-            _ => {},
-        }
         return result;
     }
 
@@ -133,15 +127,9 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         for (file_key, mut fp) in generated_files {
             let file_contents;
             if file_key == IDENTITY_FILE_KEY {
-                file_contents = &self.identity_keypair_json;
+                file_contents = self.identity_keypair_json.clone();
             } else if file_key == VOTE_ACCOUNT_FILE_KEY {
-                file_contents = &self.vote_account_keypair_json;
-            // TODO Remove this when we figure out why the faucet is needed
-            } else if file_key == FAUCET_FILE_KEY {
-                let faucet_keypair_json = self.faucet_keypair_json_opt
-                    .as_ref()
-                    .context("Needed to write faucet key file but initializer doesn't have a faucet key")?;
-                file_contents = faucet_keypair_json;
+                file_contents = self.vote_account_keypair_json.clone();
             } else {
                 return Err(anyhow!(
                     "Unrecognized file key '{}'",
@@ -188,6 +176,13 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         ];
 
         let mut cmd_fragments: Vec<String> = vec![
+            // Write the faucet keypair to every validator's filesystem
+            String::from("echo"),
+            self.faucet.get_keypair_json(),
+            String::from(">"),
+            FAUCET_KEYPAIR_FILEPATH.to_owned(),
+            String::from("&&"),
+
             String::from(VALIDATOR_BIN_FILEPATH),
             String::from("--rpc-port"),
             RPC_PORT.to_string(),
@@ -231,16 +226,14 @@ impl<'obj> DockerContainerInitializer<ValidatorService> for ValidatorContainerIn
         ];
         match self.validator_type {
             ValidatorType::FirstBootstrapper => {
-                let faucet = self.faucet
-                    .context("First bootstrapper requires a faucet, but no faucet was found")?;
-                let faucet_url = format!("{}:{}", faucet.get_ip_address(), faucet.get_port());
+                let faucet_url = format!("{}:{}", self.faucet.get_ip_address(), self.faucet.get_port());
                 cmd_fragments.append(vec![
                     String::from("--rpc-faucet-address"), 
                     faucet_url,
                 ].borrow_mut());
             },
             ValidatorType::ExtraBootstrapper => {
-                let bootstrapper = self.first_bootstrapper
+                let bootstrapper = self.first_bootstrapper.as_ref()
                     .context("Extra bootstrapper requires a first bootstrapper, but no bootstrapper was found")?;
                 let bootstrap_gossip_url = format!("{}:{}", bootstrapper.get_ip_address(), GOSSIP_PORT);
                 cmd_fragments.append(vec![

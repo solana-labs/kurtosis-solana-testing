@@ -1,8 +1,7 @@
 use anyhow::{Context, Result, anyhow};
-use core::num;
 use std::{collections::{HashMap, HashSet}, rc::Rc, time::Duration};
 
-use kurtosis_rust_lib::{core_api_bindings::api_container_api::{PartitionConnectionInfo, PartitionConnections}, networks::{network::Network, network_context::NetworkContext}, services::availability_checker::AvailabilityChecker};
+use kurtosis_rust_lib::{core_api_bindings::api_container_api::{PartitionConnectionInfo}, networks::{network::Network, network_context::NetworkContext}, services::availability_checker::AvailabilityChecker};
 
 use crate::services_impl::{faucet::{faucet_container_initializer::{FaucetContainerInitializer}, faucet_service::FaucetService}, validator::{validator_container_initializer::ValidatorContainerInitializer, validator_service::ValidatorService}};
 
@@ -57,13 +56,11 @@ impl SolanaNetwork {
             faucet_docker_image.to_owned(),
             FAUCET_KEYPAIR.keypair_json.to_owned(),
         );
-        let (service, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
+        let (faucet, checker) = self.network_ctx.add_service(FAUCET_SERVICE_ID, &initializer)
             .context("An error occurred adding the faucet")?;
         checker.wait_for_startup(&TIME_BETWEEN_BOOTSTRAPPER_AVAILABILITY_POLLS, NUM_RETRIES_FOR_BOOTSTRAPPER_AVAILBILITY)
             .context("An error occurred waiting for the faucet to start")?;
-        self.faucet = Some(service);
-        let faucet_ref = self.faucet.as_ref()
-            .context("Found no faucet value, even though we just assigned it - this is VERY strange!")?;
+        self.faucet = Some(faucet.clone());
 
         // Start bootstrappers
         info!("Starting bootstrappers...");
@@ -83,7 +80,7 @@ impl SolanaNetwork {
                     self.ledger_dir_artifact_key.clone(),
                     new_bootstrapper_keypairs.identity.keypair_json.to_owned(),
                     new_bootstrapper_keypairs.vote_account.keypair_json.to_owned(),
-                    faucet_ref,
+                    faucet.clone(),
                 );
             } else {
                 let first_boostrapper = self.bootstrappers.get(0)
@@ -97,7 +94,8 @@ impl SolanaNetwork {
                     FAUCET_KEYPAIR.keypair_json.to_owned(),
                     new_bootstrapper_keypairs.identity.keypair_json.to_owned(),
                     new_bootstrapper_keypairs.vote_account.keypair_json.to_owned(),
-                    first_boostrapper,
+                    faucet.clone(),
+                    first_boostrapper.clone(),
                 );
 
             }

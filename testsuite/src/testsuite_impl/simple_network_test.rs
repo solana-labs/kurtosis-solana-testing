@@ -88,7 +88,11 @@ impl Test for SimpleNetworkTest {
             }
             last_bootstrapper_transaction_count_opt = Some(bootstrapper_transaction_count);
 
-            sleep(TIME_BETWEEN_TRANSACTION_COUNT_CHECKS);
+            // Wallet sanity check
+            info!("Running wallet sanity check...");
+            first_bootstrapper.run_wallet_sanity_check()
+                .context("An error occurred running the wallet sanity check")?;
+            info!("Wallet sanity check passed");
 
             // TODO Wallet sanity check
             /*
@@ -113,6 +117,8 @@ impl Test for SimpleNetworkTest {
                 fi
             fi
             */
+
+            sleep(TIME_BETWEEN_TRANSACTION_COUNT_CHECKS);
         }
 
         return Ok(());
