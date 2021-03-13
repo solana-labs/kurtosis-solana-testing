@@ -34,7 +34,7 @@ impl DockerContainerInitializer<FaucetService> for FaucetContainerInitializer {
         return result;
     }
 
-    fn get_service(&self, service_context: ServiceContext) -> Box<dyn Service> {
+    fn get_service(&self, service_context: ServiceContext) -> Box<FaucetService> {
         return Box::new(FaucetService::new(service_context, self.keypair_json.clone()));
     }
 

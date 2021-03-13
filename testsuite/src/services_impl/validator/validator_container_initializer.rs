@@ -110,7 +110,7 @@ impl DockerContainerInitializer<ValidatorService> for ValidatorContainerInitiali
         return result;
     }
 
-    fn get_service(&self, service_context: ServiceContext) -> Box<dyn kurtosis_rust_lib::services::service::Service> {
+    fn get_service(&self, service_context: ServiceContext) -> Box<ValidatorService> {
         let service = ValidatorService::new(service_context);
         return Box::new(service);
     }
