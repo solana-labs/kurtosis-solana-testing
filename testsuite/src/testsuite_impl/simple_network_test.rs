@@ -56,8 +56,6 @@ impl Test for SimpleNetworkTest {
         let first_bootstrapper = network.get_bootstrapper(0)
             .context("An error occurred getting the first bootstrapper")?;
 
-        // TODO Start with a ledger verification????
-
         let expected_num_nodes = network.get_num_bootstrappers();
 
         let mut last_bootstrapper_transaction_count_opt: Option<u64> = None;
@@ -91,30 +89,6 @@ impl Test for SimpleNetworkTest {
             first_bootstrapper.run_wallet_sanity_check()
                 .context("An error occurred running the wallet sanity check")?;
             info!("Wallet sanity check passed");
-
-            // TODO Wallet sanity check
-            /*
-            echo "--- Wallet sanity ($iteration)"
-            (
-                set -x
-                timeout 60s scripts/wallet-sanity.sh --url http://127.0.0.1"$walletRpcPort"
-            ) || flag_error
-
-            iteration=$((iteration + 1))
-            */
-
-            // TODO Restart nodes if they hit a specific iteration
-            /*
-            if [[ $restartInterval != never && $((iteration % restartInterval)) -eq 0 ]]; then
-                if $rollingRestart; then
-                    rollingNodeRestart
-                else
-                    killNodes
-                    verifyLedger
-                    startNodes
-                fi
-            fi
-            */
 
             sleep(TIME_BETWEEN_TRANSACTION_COUNT_CHECKS);
         }
