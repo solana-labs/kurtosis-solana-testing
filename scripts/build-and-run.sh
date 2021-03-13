@@ -38,4 +38,6 @@ bash "${kurtosis_core_dirpath}/build-and-run-core.sh" \
     "${root_dirpath}/testsuite/Dockerfile" \
     "${kurtosis_core_dirpath}/kurtosis.sh" \
     --custom-params "${custom_params_json}" \
+    `# We set parallelism to 1 because, as of 2021-01-12, each testnet is running 10 nodes and so each test is fairly heavy` \
+    --parallelism 1 \
     ${1+"${@}"}
