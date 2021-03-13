@@ -8,7 +8,7 @@ use super::{network_partition_test::NetworkPartitionTest, simple_network_test};
 // TODO Formalize these at the testsuite level in Kurtosis itself
 // See: https://github.com/kurtosis-tech/kurtosis-libs/issues/33
 pub (super) const LEDGER_DIR_ARTIFACT_KEY: &str = "ledger-dir";
-pub (super) const LEDGER_DIR_ARTIFACT_URL: &str = "https://kurtosis-public-access.s3.us-east-1.amazonaws.com/client-artifacts/solana/5-bootstrapper-nodes-genesis-ledger_2021-03-09.tgz";
+pub (super) const LEDGER_DIR_ARTIFACT_URL: &str = "https://kurtosis-public-access.s3.us-east-1.amazonaws.com/client-artifacts/solana/test-ledger.tgz";
 
 const SANITY_CHECK_NUM_ITERATIONS: u32 = 3;
 const NETWORK_PARTITIONING_ROUNDS: u32 = 3;
