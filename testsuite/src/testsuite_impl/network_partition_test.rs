@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, thread::sleep, time::{Duration, Instant}};
+use std::{borrow::BorrowMut, collections::{HashMap, HashSet}, convert::TryInto, thread::sleep, time::{Duration, Instant}};
 
 use anyhow::{anyhow, Context, Result};
 use kurtosis_rust_lib::testsuite::{test::Test, test_configuration::TestConfiguration};
@@ -21,16 +21,20 @@ const NUM_SUCCESSIVE_VERIFICATION_CHECKS: usize = 3;
 // The time between predicate verification checks
 const PAUSE_BETWEEN_PREDICATE_VERIFICATION_CHECKS: Duration = Duration::from_secs(1);
 
+const NUM_NETWORK_PARTITION_ROUNDS: u32 = 5;
+
+// If the average time-to-slots-advancing-after-partitioning of all the network partitioning rounds is greater
+// than this duration, we'll throw an error
+const AVG_TIME_TO_ADVANCING_THRESHOLD: Duration = Duration::from_secs(30);
+
 pub struct NetworkPartitionTest {
     docker_image: String,
-    num_partitioning_rounds: u32,
 }
 
 impl NetworkPartitionTest {
     pub fn new(docker_image: String, num_partitioning_rounds: u32) -> NetworkPartitionTest {
         return NetworkPartitionTest{
             docker_image,
-            num_partitioning_rounds,
         };
     }
 
@@ -169,25 +173,60 @@ impl Test for NetworkPartitionTest {
             .context("An error occurred while waiting for the cluster slots to be advancing")?;
         info!("Slots are advancing");
 
-        info!("Partitioning network...");
-        network.partition_in_half_with_connection(true)
-            .context("An error occurred partitioning the network into two halves, with the connection between them blocked")?;
-        info!("Network partitioned");
+        let mut times_to_advancing: Vec<Duration> = Vec::new();
+        for i in 0..NUM_NETWORK_PARTITION_ROUNDS {
+            info!("--------------------- Partition/Heal Round {} ----------------------", i);
+            info!("Partitioning network...");
+            network.partition_in_half_with_connection(true)
+                .context("An error occurred partitioning the network into two halves, with the connection between them blocked")?;
+            info!("Network partitioned");
 
-        info!("Verifying that slots are no longer advancing...");
-        let time_to_stop_advancing = NetworkPartitionTest::wait_until_cluster_matches_state(false, &network)
-            .context("An error occurred while waiting for the cluster slots to stop advancing")?;
-        info!("Slots stopped advancing in {:?}", time_to_stop_advancing);
+            info!("Verifying that slots are no longer advancing...");
+            let time_to_stop_advancing = NetworkPartitionTest::wait_until_cluster_matches_state(false, &network)
+                .context("An error occurred while waiting for the cluster slots to stop advancing")?;
+            info!("Slots stopped advancing in {:?}", time_to_stop_advancing);
 
-        info!("Healing partition...");
-        network.partition_in_half_with_connection(false)
-            .context("An error occurred healing the network partition")?;
-        info!("Partition healed");
+            info!("Healing partition...");
+            network.partition_in_half_with_connection(false)
+                .context("An error occurred healing the network partition")?;
+            info!("Partition healed");
 
-        info!("Verifying slots are advancing once again...");
-        let time_to_advancing_again = NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
-            .context("An error occurred while waiting for the cluster slots to start advancing again")?;
-        info!("Slots started advancing once again in {:?}", time_to_advancing_again);
+            info!("Verifying slots are advancing once again...");
+            let time_to_advancing_again = NetworkPartitionTest::wait_until_cluster_matches_state(true, &network)
+                .context("An error occurred while waiting for the cluster slots to start advancing again")?;
+            info!("Slots started advancing once again in {:?}", time_to_advancing_again);
+            info!("");
+
+            times_to_advancing.push(time_to_advancing_again);
+        }
+
+        info!("Heal time per round:");
+        let mut sum_heal_time_millis: u128 = 0;
+        for (i, time) in times_to_advancing.iter().enumerate() {
+            info!(" - {}: {:?}", i, time);
+            sum_heal_time_millis += time.as_millis();
+        }
+        let sum_heal_time_millis_u64: u64 = sum_heal_time_millis.try_into()
+            .context("An error occurred converting the u128 sum heal time millis to u64")?;
+        let num_rounds_u64: u64 = times_to_advancing.len().try_into()
+            .context("An error occurred converting the number of rounds to u64")?;
+        let avg_heal_time_millis: u64 = sum_heal_time_millis_u64 / num_rounds_u64;
+        let avg_heal_time = Duration::from_millis(avg_heal_time_millis);
+        info!("Average heal time: {:?}", avg_heal_time);
+        
+        if avg_heal_time > AVG_TIME_TO_ADVANCING_THRESHOLD {
+            return Err(anyhow!(
+                "The average heal time is {:?}, which is greater than the max allowed average heal time of {:?}",
+                avg_heal_time,
+                AVG_TIME_TO_ADVANCING_THRESHOLD,
+            ));
+        } else {
+            info!(
+                "The average heal time is {:?}, which is less than the max allowed average heal time of {:?}",
+                avg_heal_time,
+                AVG_TIME_TO_ADVANCING_THRESHOLD,
+            );
+        }
 
         return Ok(());
     }
@@ -197,6 +236,6 @@ impl Test for NetworkPartitionTest {
     }
 
     fn get_execution_timeout(&self) -> std::time::Duration {
-        return Duration::from_secs(120);
+        return Duration::from_secs(300);
     }
 }
