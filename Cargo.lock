@@ -483,9 +483,9 @@ dependencies = [
 
 [[package]]
 name = "kurtosis-rust-lib"
-version = "1.15.0"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9a9b12a0fd69ae5c745afaee5d9d453cbec0bc744c8a198240bbcbb535f5987"
+checksum = "53453f7bb7e0251e1184e23bbf159bac50ae55672e5ba83d9ccc0b295148baec"
 dependencies = [
  "anyhow",
  "dashmap",
